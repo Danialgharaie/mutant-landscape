@@ -6,7 +6,7 @@ This repository implements a **fitness landscape construction** method for prote
 
 The framework currently supports **additive scoring** for multi-site mutations and **per-position fitness landscapes**. Future updates will introduce **epistatic interaction analysis** for capturing higher-order mutation effects.
 
----
+
 
 ## **Features**
 
@@ -16,7 +16,7 @@ The framework currently supports **additive scoring** for multi-site mutations a
 
 🚀 **Coming Soon**: Epistatic Interaction Analysis (Pairwise Effects)
 
----
+
 
 ## **Mathematical Formulation**
 
@@ -39,9 +39,9 @@ To construct a **per-position fitness landscape**, we iterate over all possible 
 
 1. Compute mutation effects **Δ** for all **20 amino acids** at each position:
    
-   ```math
-   Δ_k = \log P(x_{p} = AA_k | x, s) - \log P(x_{p} = w_p | x, s)
-   ```
+```math   
+Δ_k = \log P(x_{p} = AA_k | x, s) - \log P(x_{p} = w_p | x, s)
+```   
 
 2. Store results in a **fitness matrix** $Δ \in R^{L×20}$, where $L$ is the sequence length.
 

@@ -1,0 +1,18 @@
+[project]
+name = "mutant-landscape"
+version = "2025.02.01"
+authors = [
+  {name="Danial Gharaie Amirabadi"},
+]
+description = "Framework for constructing protein mutant fitness landscapes."
+license = {file = "LICENSE"}
+readme = "README.md"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+  "Development Status :: 3 - Alpha",
+]
+
+[tool.ruff]
+line-length = 150
+indent-width = 2

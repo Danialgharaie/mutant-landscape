@@ -146,3 +146,7 @@ def main():
 
   pred_scores = run_prosst(args.input_seq, args.pdb_fpath, args.output_fpath)
   plot_landscape(pred_scores, args.output_fpath)
+
+
+if __name__ == '__main__':
+  main()

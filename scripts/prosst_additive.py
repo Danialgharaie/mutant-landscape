@@ -109,11 +109,28 @@ def plot_landscape(pred_scores, output_fpath):
   -------
   None
   """
-  pred_scores["Position"] = pred_scores["mutant"].str[1:-1]
   pred_scores["Amino Acid"] = pred_scores["mutant"].str[0]
+  pred_scores["Position"] = pred_scores["mutant"].str[1:-1].astype(int)
   pred_scores["Score"] = pred_scores["score"]
+  pred_scores["AA_Code"] = pred_scores["Amino Acid"].astype("category").cat.codes
+  fig = plt.figure()
+  ax = fig.add_subplot(111, projection='3d')
+  ax.scatter(
+      pred_scores["Position"],
+      pred_scores["AA_Code"],
+      pred_scores["Score"],
+      c=pred_scores["Score"], 
+      cmap='viridis',
+      depthshade=True
+  )
+  ax.set_xlabel("Position")
+  ax.set_ylabel("Amino Acid")
+  ax.set_zlabel("Score")
 
-  pred_scores.plot(x="Position", y="Amino Acid", z="Score", kind="3d")
+  aa_categories = pred_scores["Amino Acid"].astype("category").cat.categories
+  ax.set_yticks(range(len(aa_categories)))
+  ax.set_yticklabels(aa_categories)
+
   plt.savefig(f"{output_fpath}/landscape.png")
 
 

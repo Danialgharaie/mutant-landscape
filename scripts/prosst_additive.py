@@ -108,83 +108,29 @@ def run_prosst(input_seq, pdb_fpath, output_fpath):
   pred_matrix = pred_matrix[cols]
 
   # Save the pivoted matrix.
-  pred_matrix.to_csv(f"{output_fpath}/pred_scores.csv", index=False)
+  pred_matrix.to_csv(os.path.join(output_fpath, "pred_scores.csv"), index=False)
 
   return pred_matrix
 
 
-def plot_landscape(pred_scores, output_fpath):
-  """
-  Plots a 3D fitness landscape using the given predicted scores in long format.
-  This function expects the original long-format DataFrame, so it extracts
-  the necessary information from the 'mutant' column. Note that if you require
-  a landscape plot, you might want to generate the long-format DF separately.
-
-  Parameters
-  ----------
-  pred_scores : pandas.DataFrame
-      A DataFrame containing the mutation scores. If using the pivoted matrix,
-      the function will extract the long format from the 'index' and 'wt' columns.
-  output_fpath : str
-      The path to which the plot should be saved.
-
-  Returns
-  -------
-  None
-  """
-  # To plot, we need a long-format DataFrame.
-  # Recreate the long format from the pivoted matrix.
-  long_format = pd.melt(pred_scores, id_vars=["index", "wt"], var_name="mutant", value_name="score")
-  # Exclude rows where 'score' is NaN (if any)
-  long_format = long_format.dropna(subset=["score"])
-  # For plotting, assume the wild-type amino acid is not needed.
-  long_format["Position"] = long_format["index"]
-  long_format["Amino Acid"] = long_format["mutant"]
-  long_format["AA_Code"] = long_format["Amino Acid"].astype("category").cat.codes
-
-  fig = plt.figure()
-  ax = fig.add_subplot(111, projection="3d")
-  ax.scatter(long_format["Position"], long_format["AA_Code"], long_format["score"], c=long_format["score"], cmap="viridis", depthshade=True)
-  ax.set_xlabel("Position")
-  ax.set_ylabel("Amino Acid")
-  ax.set_zlabel("Score")
-
-  aa_categories = long_format["Amino Acid"].astype("category").cat.categories
-  ax.set_yticks(range(len(aa_categories)))
-  ax.set_yticklabels(aa_categories)
-
-  plt.savefig(f"{output_fpath}/landscape.png")
-
-
 def plot_heatmap(pred_scores, output_fpath):
-  """
-  Plots a heatmap of the mutation scores from the pivoted matrix.
-  The x-axis corresponds to the mutated amino acid and the y-axis to the mutation position.
+  pivoted = pred_scores.set_index("index").drop(columns=["wt"], errors="ignore")
+  num_rows, num_cols = pivoted.shape
 
-  Parameters
-  ----------
-  pred_scores : pandas.DataFrame
-      The pivoted DataFrame containing the mutation score matrix.
-  output_fpath : str
-      The path to which the heatmap image should be saved.
+  height = max(8, num_rows * 0.10)
+  width = 4.8
 
-  Returns
-  -------
-  None
-  """
-  # Create a copy and set the index to "index" (mutation position).
-  heatmap_df = pred_scores.set_index("index")
-  # Remove the 'wt' column, as it is not used in the heatmap.
-  if "wt" in heatmap_df.columns:
-    heatmap_df = heatmap_df.drop(columns=["wt"])
+  plt.figure(figsize=(width, height))
+  ax = sns.heatmap(pivoted, cmap="Blues", cbar_kws={"label": "Score"}, yticklabels=True, annot=False)
 
-  plt.figure(figsize=(10, 8))
-  sns.heatmap(heatmap_df, annot=True, fmt=".2f", cmap="viridis")
-  plt.xlabel("Mutated Amino Acid")
-  plt.ylabel("Position")
-  plt.title("Mutation Score Heatmap")
+  ax.tick_params(axis="y", labelsize=8)
+  ax.set_xlabel("Amino Acid")
+  ax.set_ylabel("Position")
+  ax.set_title("Fitness Landscape Heatmap")
+
   plt.tight_layout()
-  plt.savefig(f"{output_fpath}/heatmap.png")
+  plt.savefig(os.path.join(output_fpath, "landscape_heatmap.png"), dpi=300)
+  plt.close()
 
 
 def main():
@@ -209,7 +155,6 @@ def main():
 
   # Run the ProSST model and save the pivoted (matrix) DataFrame.
   pred_scores = run_prosst(args.input_seq, args.pdb_fpath, args.output_fpath)
-  plot_landscape(pred_scores, args.output_fpath)
   plot_heatmap(pred_scores, args.output_fpath)
 
 

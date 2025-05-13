@@ -61,6 +61,9 @@ conda activate "$ENV_NAME"
 log "Installing requirements from $REQ_FILE..."
 pip install -r "$PROJECT_ROOT/$REQ_FILE"
 
+# Initialize PYTHONPATH if not set
+PYTHONPATH=${PYTHONPATH:-}
+
 # Clone and setup ProSST
 PROSST_DIR="$PROJECT_ROOT/ProSST"
 if [ ! -d "$PROSST_DIR" ]; then
@@ -69,11 +72,11 @@ if [ ! -d "$PROSST_DIR" ]; then
     
     # Add ProSST to PYTHONPATH in conda environment
     mkdir -p "$CONDA_PREFIX/etc/conda/activate.d"
-    echo "export PYTHONPATH=\"$PROSST_DIR:\$PYTHONPATH\"" > "$CONDA_PREFIX/etc/conda/activate.d/env_vars.sh"
+    echo "export PYTHONPATH=\"$PROSST_DIR\${PYTHONPATH:+:\$PYTHONPATH}\"" > "$CONDA_PREFIX/etc/conda/activate.d/env_vars.sh"
     chmod +x "$CONDA_PREFIX/etc/conda/activate.d/env_vars.sh"
     
     # Update current session's PYTHONPATH
-    export PYTHONPATH="$PROSST_DIR:$PYTHONPATH"
+    export PYTHONPATH="$PROSST_DIR${PYTHONPATH:+:$PYTHONPATH}"
 fi
 
 log "Setup completed successfully!"

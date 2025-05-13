@@ -49,3 +49,14 @@ To construct a **per-position fitness landscape**, we iterate over all possible 
 3. For multi-site mutations, sum the relevant **Δ** values.
 
 ⚠️ **Important Note**: This model assumes **independent additive contributions** and does not capture **epistatic interactions** (to be introduced in future updates).
+
+
+## Using ProSST with your Python code
+
+After running the setup script, if you want to use ProSST in your Python code, add it to your PYTHONPATH:
+
+```bash
+export PYTHONPATH="$PYTHONPATH:$(pwd)/ProSST"
+```
+
+You can add this line to your `.bashrc`, `.zshrc`, or run it in your shell before using the code.

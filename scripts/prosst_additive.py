@@ -99,8 +99,8 @@ def run_prosst(input_seq, pdb_fpath, output_fpath):
   model, tokenizer, processor = _load_models()
 
   # Process structure
-  structure_sequence = processor(pdb_fpath)
-  structure_sequence_offset = [i + 3 for i in structure_sequence]
+  structure_sequence = processor(pdb_fpath, return_residue_seq=False)
+  structure_sequence_offset = [i + 3 for i in structure_sequence["2048"][pdb_fpath.split("/")[-1]]["struct"]]
 
   # Tokenize input sequence
   tokenized_res = tokenizer([input_seq], return_tensors="pt")

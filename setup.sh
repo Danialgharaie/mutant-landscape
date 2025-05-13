@@ -61,22 +61,14 @@ conda activate "$ENV_NAME"
 log "Installing requirements from $REQ_FILE..."
 pip install -r "$PROJECT_ROOT/$REQ_FILE"
 
-# Initialize PYTHONPATH if not set
-PYTHONPATH=${PYTHONPATH:-}
-
 # Clone and setup ProSST
 PROSST_DIR="$PROJECT_ROOT/ProSST"
 if [ ! -d "$PROSST_DIR" ]; then
     log "Cloning ProSST repository..."
     git clone https://github.com/ai4protein/ProSST.git "$PROSST_DIR"
     
-    # Add ProSST to PYTHONPATH in conda environment
-    mkdir -p "$CONDA_PREFIX/etc/conda/activate.d"
-    echo "export PYTHONPATH=\"$PROSST_DIR\${PYTHONPATH:+:\$PYTHONPATH}\"" > "$CONDA_PREFIX/etc/conda/activate.d/env_vars.sh"
-    chmod +x "$CONDA_PREFIX/etc/conda/activate.d/env_vars.sh"
-    
-    # Update current session's PYTHONPATH
-    export PYTHONPATH="$PROSST_DIR${PYTHONPATH:+:$PYTHONPATH}"
+    # Add ProSST to PYTHONPATH using the requested format
+    export PYTHONPATH="$PYTHONPATH:$(pwd)/ProSST"
 fi
 
 log "Setup completed successfully!"

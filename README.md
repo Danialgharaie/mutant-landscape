@@ -60,3 +60,14 @@ export PYTHONPATH="$PYTHONPATH:$(pwd)/ProSST"
 ```
 
 You can add this line to your `.bashrc`, `.zshrc`, or run it in your shell before using the code.
+
+
+## Installing torch-scatter
+
+`torch-scatter` must be installed using a version-specific wheel. For PyTorch 2.1.1 (CPU), run:
+
+```bash
+pip install torch-scatter -f https://data.pyg.org/whl/torch-2.1.1+cpu.html
+```
+
+If you use a different PyTorch version, see: https://pytorch-geometric.com/whl/

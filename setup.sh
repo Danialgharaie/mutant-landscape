@@ -89,5 +89,49 @@ else
 fi
 cd "$PROJECT_ROOT"
 
+# Install DE-STRESS
+log "Setting up DE-STRESS..."
+DESTRESS_DIR="$PROJECT_ROOT/de-stress"
+
+# Clone DE-STRESS if not present
+if [ ! -d "$DESTRESS_DIR" ]; then
+    log "Cloning DE-STRESS repository..."
+    git clone https://github.com/wells-wood-research/de-stress.git "$DESTRESS_DIR" || {
+        log "Error: Failed to clone DE-STRESS repository"
+        exit 1
+    }
+fi
+
+# Copy environment file if not present
+if [ ! -f "$DESTRESS_DIR/.env-headless" ]; then
+    log "Setting up DE-STRESS environment file..."
+    if [ -f "$DESTRESS_DIR/.env-headless-testing" ]; then
+        cp "$DESTRESS_DIR/.env-headless-testing" "$DESTRESS_DIR/.env-headless" || {
+            log "Error: Failed to copy .env-headless-testing"
+            exit 1
+        }
+    else
+        log "Error: .env-headless-testing not found in DE-STRESS directory"
+        exit 1
+    fi
+fi
+
+# Run DE-STRESS setup script
+if [ -f "$DESTRESS_DIR/setup.sh" ]; then
+    log "Running DE-STRESS setup script..."
+    cd "$DESTRESS_DIR"
+    # Run setup.sh in headless mode (it will handle requirements installation)
+    ./setup.sh || {
+        log "Error: DE-STRESS setup.sh failed"
+        cd "$PROJECT_ROOT"
+        exit 1
+    }
+    cd "$PROJECT_ROOT"
+    log "DE-STRESS setup completed successfully"
+else
+    log "Error: setup.sh not found in DE-STRESS directory"
+    exit 1
+fi
+
 log "Setup completed successfully!"
 log "To activate the environment, run: conda activate $ENV_NAME"

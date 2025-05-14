@@ -173,3 +173,9 @@ cython_debug/
 # ProSST 
 out/
 ProSST/
+
+# EvoEF2
+EvoEF2/
+
+# de-stress
+de-stress/

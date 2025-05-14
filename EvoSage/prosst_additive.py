@@ -59,7 +59,7 @@ def _load_models():
     raise RuntimeError(f"Failed to load ProSST models: {str(e)}")
 
 
-def run_prosst(input_seq, pdb_fpath, output_fpath):
+def run_prosst(input_seq, pdb_fpath):
   """
   Computes the predicted scores of all possible single point mutations of a given protein sequence
   using the ProSST model and saves the results in a matrix format. The saved CSV file has the columns:
@@ -73,8 +73,6 @@ def run_prosst(input_seq, pdb_fpath, output_fpath):
     The input protein sequence.
   pdb_fpath : str
     The path to the PDB file of the protein structure.
-  output_fpath : str
-    The path to which the output file should be written.
 
   Returns
   -------
@@ -98,7 +96,7 @@ def run_prosst(input_seq, pdb_fpath, output_fpath):
   model, tokenizer, processor = _load_models()
 
   # Process structure
-  structure_sequence = processor(pdb_fpath, return_residue_seq=False)
+  structure_sequence = processor(pdb_fpath)
   structure_sequence_offset = [i + 3 for i in structure_sequence["2048"][pdb_fpath.split("/")[-1]]["struct"]]
 
   # Tokenize input sequence
@@ -168,9 +166,6 @@ def run_prosst(input_seq, pdb_fpath, output_fpath):
 
   # Reset index to make "index" a regular column
   pred_matrix = pred_matrix.reset_index()
-
-  # Save the matrix
-  pred_matrix.to_csv(os.path.join(output_fpath, "pred_scores.csv"), index=False)
 
   return pred_matrix
 

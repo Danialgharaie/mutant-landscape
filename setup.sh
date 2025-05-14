@@ -68,5 +68,26 @@ if [ ! -d "$PROSST_DIR" ]; then
     git clone https://github.com/ai4protein/ProSST.git "$PROSST_DIR"
 fi
 
+EVOEF2_DIR="$PROJECT_ROOT/EvoEF2"
+if [ ! -d "$EVOEF2_DIR" ]; then
+    log "Cloning EvoEF2 repository..."
+    git clone https://github.com/tommyhuangthu/EvoEF2 "$EVOEF2_DIR"
+fi
+
+log "Building EvoEF2..."
+cd "$EVOEF2_DIR"
+if ./build.sh; then
+    log "EvoEF2 built successfully with build.sh"
+elif g++ -O3 --fast-math -o EvoEF2 src/*.cpp; then
+    log "EvoEF2 built successfully with g++ --fast-math"
+elif g++ -O3 -o EvoEF2 src/*.cpp; then
+    log "EvoEF2 built successfully with g++ (without --fast-math)"
+else
+    log "Error: Failed to build EvoEF2. Please check the build instructions for your system."
+    cd "$PROJECT_ROOT" 
+    exit 1
+fi
+cd "$PROJECT_ROOT"
+
 log "Setup completed successfully!"
 log "To activate the environment, run: conda activate $ENV_NAME"

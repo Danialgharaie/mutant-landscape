@@ -66,8 +66,6 @@ PROSST_DIR="$PROJECT_ROOT/ProSST"
 if [ ! -d "$PROSST_DIR" ]; then
     log "Cloning ProSST repository..."
     git clone https://github.com/ai4protein/ProSST.git "$PROSST_DIR"
-    
-
 fi
 
 log "Setup completed successfully!"

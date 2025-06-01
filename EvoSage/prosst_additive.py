@@ -62,7 +62,7 @@ def _load_models():
 def run_prosst(input_seq, pdb_fpath):
   """
   Computes the predicted scores of all possible single point mutations of a given protein sequence
-  using the ProSST model and saves the results in a matrix format. The saved CSV file has the columns:
+  using the ProSST model. The returned pandas.DataFrame contains the following columns:
     - index: the mutation position (1-indexed)
     - wt: the wild-type amino acid at that position
     - one column per amino acid (from SINGLE_LETTER_CODES) with the predicted score.

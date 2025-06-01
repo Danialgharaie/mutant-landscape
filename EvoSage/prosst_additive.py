@@ -149,7 +149,9 @@ def run_prosst(input_seq, pdb_fpath):
   score_matrix = all_mt_logits - wt_logits_expanded
 
   # Convert to numpy for easier manipulation with pandas
-  score_matrix_np = score_matrix.numpy()
+  # Ensure the tensor is on CPU before converting to numpy. This avoids
+  # device-related errors when the model is moved to GPU by the caller.
+  score_matrix_np = score_matrix.cpu().numpy()
 
   # Create DataFrame directly from the score matrix
   # First create a multi-index DataFrame

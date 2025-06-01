@@ -71,3 +71,15 @@ pip install torch-scatter -f https://data.pyg.org/whl/torch-2.1.1+cpu.html
 ```
 
 If you use a different PyTorch version, see: https://pytorch-geometric.com/whl/
+
+## Running the Evolutionary Search
+
+After running `setup.sh` to install dependencies and external tools, invoke the
+genetic algorithm with:
+
+```bash
+python -m EvoSage.main "<WT_SEQUENCE>" path/to/structure.pdb --generations 50
+```
+
+Use `--help` to see all available options. The script prints the final Pareto
+front and can also write a CSV log when `--output_csv` is provided.

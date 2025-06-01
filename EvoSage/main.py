@@ -16,18 +16,7 @@ from .ga_utils import (
 )
 from .evoef2 import build_mutant
 from .eval import run_destress
-
-
-def compute_additive_score(seq: str, wt_seq: str, scores: pd.DataFrame) -> float:
-    """Compute additive score for ``seq`` using per-position mutation scores."""
-    total = 0.0
-    for i, (wt, aa) in enumerate(zip(wt_seq, seq), start=1):
-        if aa == wt:
-            continue
-        val = scores.loc[scores["index"] == i, aa]
-        if not val.empty:
-            total += float(val.values[0])
-    return float(total)
+from .scoring import compute_additive_score
 
 
 def parse_args() -> argparse.Namespace:
@@ -105,7 +94,7 @@ def main() -> None:
     for gen in range(args.generations):
         score_list: List[Tuple[float, float]] = []
         for seq in pop:
-            add_score = compute_additive_score(seq, wt_seq, scores)
+            add_score = compute_additive_score(seq, scores)
             if seq not in destress_cache:
                 mut_str = _mutfile_from_seq(seq, wt_seq)
                 if mut_str:
@@ -132,13 +121,13 @@ def main() -> None:
             new_pop.append(child)
         pop = new_pop
 
-    final_fronts = nsga2_sort(pop, [(compute_additive_score(s, wt_seq, scores), destress_cache.get(s, 0.0)) for s in pop])
+    final_fronts = nsga2_sort(pop, [(compute_additive_score(s, scores), destress_cache.get(s, 0.0)) for s in pop])
     best_front = final_fronts[0]
 
     print("Final Pareto Front:")
     for cand in best_front:
         seq = cand["seq"]
-        add = compute_additive_score(seq, wt_seq, scores)
+        add = compute_additive_score(seq, scores)
         dest = destress_cache.get(seq, 0.0)
         print(seq, f"Additive: {add:.3f}", f"Destress: {dest:.3f}")
 

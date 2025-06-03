@@ -83,3 +83,15 @@ python -m EvoSage.main "<WT_SEQUENCE>" path/to/structure.pdb --generations 50
 
 Use `--help` to see all available options. The script prints the final Pareto
 front and can also write a CSV log when `--output_csv` is provided.
+
+## Plotting Results
+
+The `EvoSage.plot_metrics` module provides helper functions to visualize the search progress. After running the evolutionary search with `--output_csv run_history.csv`, generate plots with:
+
+```python
+from EvoSage.plot_metrics import plot_history, plot_final_scatter
+plot_history("run_history.csv", "plots")
+plot_final_scatter("run_history.csv", "plots")
+```
+
+`plot_history` shows how the average additive and z-score metrics evolve per generation, while `plot_final_scatter` plots a pairwise scatter matrix for the last generation.

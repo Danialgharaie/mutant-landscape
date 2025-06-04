@@ -99,6 +99,12 @@ def run_prosst(input_seq, pdb_fpath):
   structure_sequence = processor(pdb_fpath)
   structure_key = os.path.basename(pdb_fpath)
   structure_sequence_offset = [i + 3 for i in structure_sequence["2048"][structure_key]["struct"]]
+  structure_sequence_length = len(structure_sequence["2048"][structure_key]["struct"])
+  if len(input_seq) != structure_sequence_length:
+    raise ValueError(
+      f"Input sequence length ({len(input_seq)}) does not match PDB structure sequence length "
+      f"({structure_sequence_length}). Please ensure wt_seq matches the sequence in {pdb_fpath}"
+    )
 
   # Tokenize input sequence
   tokenized_res = tokenizer([input_seq], return_tensors="pt")

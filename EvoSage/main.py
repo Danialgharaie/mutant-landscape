@@ -75,7 +75,7 @@ def _mutfile_from_seq(seq: str, wt_seq: str, chain: str = "A") -> str:
     parts = []
     for i, (wt, aa) in enumerate(zip(wt_seq, seq), start=1):
         if wt != aa:
-            parts.append(f"{chain}{wt}{i}{aa}")
+            parts.append(f"{wt}{chain}{i}{aa}")
     return ",".join(parts) + ";" if parts else ""
 
 
@@ -199,7 +199,8 @@ def main() -> None:
             if seq not in destress_cache:
                 mut_str = _mutfile_from_seq(seq, wt_seq)
                 with tempfile.TemporaryDirectory() as tmpdir:
-                    if mut_str:
+                    if mut_str and mut_str != ";":
+                        print(mut_str)
                         mut_file = os.path.join(tmpdir, "mut.txt")
                         with open(mut_file, "w") as fh:
                             fh.write(mut_str)

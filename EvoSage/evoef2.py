@@ -1,5 +1,6 @@
 import subprocess
 import os
+import shutil
 
 
 def build_mutant(pdb_fpath, mutant_file_path, output_dir):
@@ -26,36 +27,71 @@ def build_mutant(pdb_fpath, mutant_file_path, output_dir):
   RuntimeError
     If EvoEF2 execution fails.
   """
-  # Setup paths and validate inputs
+  # Setup paths and validate EvoEF2 executable
   evoef2_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "EvoEF2", "EvoEF2")
-  for path, desc in [(evoef2_path, "EvoEF2 executable"), (pdb_fpath, "PDB file"), (mutant_file_path, "mutant file")]:
-    if not os.path.exists(path):
-      raise FileNotFoundError(f"{desc} not found: {path}")
+  evoef2_dir = os.path.dirname(evoef2_path)
+
+  if not os.path.exists(evoef2_path):
+    raise FileNotFoundError(f"EvoEF2 executable not found: {evoef2_path}")
 
   os.makedirs(output_dir, exist_ok=True)
 
-  # Run EvoEF2
+  # Copy input files to EvoEF2's directory for local processing
+  # Generate unique temporary names for copied files to avoid conflicts
+  temp_pdb_name = "input_pdb_" + os.path.basename(pdb_fpath)
+  temp_mut_name = "mut_file_" + os.path.basename(mutant_file_path)
+  temp_pdb_path_in_evoef2_dir = os.path.join(evoef2_dir, temp_pdb_name)
+  temp_mut_path_in_evoef2_dir = os.path.join(evoef2_dir, temp_mut_name)
+
+  shutil.copy(pdb_fpath, temp_pdb_path_in_evoef2_dir)
+  shutil.copy(mutant_file_path, temp_mut_path_in_evoef2_dir)
+
+  # Get list of PDBs in evoef2_dir before running EvoEF2
+  initial_pdbs_in_evoef2_dir = {f for f in os.listdir(evoef2_dir) if f.endswith(".pdb")}
+
+  # Run EvoEF2 from its own directory with relative paths to copied inputs
   cmd = [
-    evoef2_path,
+    "./" + os.path.basename(evoef2_path), # EvoEF2 executable name with relative path prefix
     "--command=BuildMutant",
-    f"--pdb={os.path.abspath(pdb_fpath)}",
-    f"--mutant_file={os.path.abspath(mutant_file_path)}",
+    f"--pdb={temp_pdb_name}", # Relative path to copied PDB
+    f"--mutant_file={temp_mut_name}", # Relative path to copied mutant file
   ]
+  print(f"Executing EvoEF2 command: {' '.join(cmd)}")
+  print(f"EvoEF2 working directory: {evoef2_dir}")
 
   try:
-    result = subprocess.run(cmd, cwd=output_dir, check=True, capture_output=True, text=True)
+    result = subprocess.run(cmd, cwd=evoef2_dir, check=True, capture_output=True, text=True)
     print(f"EvoEF2 stdout:\n{result.stdout}")
     if result.stderr:
       print(f"EvoEF2 stderr:\n{result.stderr}")
 
-    # Get the output file from EvoEF2's output
-    output_files = [f for f in os.listdir(output_dir) if f.endswith(".pdb")]
-    if not output_files:
-      raise RuntimeError(f"No output PDB files found. EvoEF2 output: {result.stdout} {result.stderr}")
+    # Get list of PDBs in evoef2_dir after running EvoEF2
+    final_pdbs_in_evoef2_dir = {f for f in os.listdir(evoef2_dir) if f.endswith(".pdb")}
 
-    return os.path.join(output_dir, output_files[0])
+    # Find the new PDB file created by EvoEF2
+    new_pdbs = list(final_pdbs_in_evoef2_dir - initial_pdbs_in_evoef2_dir)
+
+    if not new_pdbs:
+      raise RuntimeError(f"No new output PDB file found in {evoef2_dir} after EvoEF2 run. EvoEF2 stdout: {result.stdout}, stderr: {result.stderr}")
+    
+    # If multiple new PDBs are found (unlikely for single BuildMutant, but robust)
+    # choose the most recently modified one.
+    generated_pdb_filename = max(new_pdbs, key=lambda f: os.path.getctime(os.path.join(evoef2_dir, f)))
+    generated_pdb_path_in_evoef2_dir = os.path.join(evoef2_dir, generated_pdb_filename)
+
+    # Move the generated PDB to the intended output_dir
+    final_pdb_path = os.path.join(output_dir, os.path.basename(generated_pdb_path_in_evoef2_dir))
+    shutil.move(generated_pdb_path_in_evoef2_dir, final_pdb_path)
+
+    return final_pdb_path
 
   except subprocess.CalledProcessError as e:
     raise RuntimeError(f"EvoEF2 failed (code {e.returncode}):\n{e.stderr}")
   except Exception as e:
     raise RuntimeError(f"EvoEF2 error: {str(e)}")
+  finally:
+    # Clean up copied temporary files
+    if os.path.exists(temp_pdb_path_in_evoef2_dir):
+      os.remove(temp_pdb_path_in_evoef2_dir)
+    if os.path.exists(temp_mut_path_in_evoef2_dir):
+      os.remove(temp_mut_path_in_evoef2_dir)

@@ -117,6 +117,9 @@ def enforce_diversity(pop, d_min=5):
 
 def tournament(pop, k=3):
   """Perform tournament selection on the population."""
+  k = min(k, len(pop))  # Ensure k is not larger than population size
+  if k == 0:
+    return None # Or raise a more specific error, depending on desired behavior
   contenders = random.sample(pop, k)
   contenders.sort(key=lambda x: (x.get("rank", 0), -x.get("crowding", 0)))
   return contenders[0]["seq"] if isinstance(contenders[0], dict) else contenders[0]

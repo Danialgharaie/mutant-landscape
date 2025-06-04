@@ -36,7 +36,7 @@ def run_destress(pdb_dir):
   cmd = ["python3", destress_script, "--i", os.path.abspath(pdb_dir)]
 
   try:
-    result = subprocess.run(cmd, cwd=pdb_dir, check=True, capture_output=True, text=True)
+    result = subprocess.run(cmd, cwd=destress_dir, check=True, capture_output=True, text=True)
     if result.stderr:
       print(f"DeStReSS stderr:\n{result.stderr}")
 
@@ -55,9 +55,12 @@ def run_destress(pdb_dir):
       # Convert all rows to a dictionary with design names as keys
       results = {}
       for row in reader:
-        design_name = row.get('design name', '') 
+        # Try several possible column names for the design name
+        design_name = row.get('design name') or row.get('design_name') or row.get('file_name') or ''
         if design_name:
           results[design_name] = dict(row)
+        else:
+          print("Warning: No design name found in row. Keys:", row.keys())
       return results
 
   except subprocess.CalledProcessError as e:

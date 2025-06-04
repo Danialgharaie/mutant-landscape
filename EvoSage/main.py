@@ -234,7 +234,7 @@ def main() -> None:
                         mut_file = os.path.join(tmpdir, "mut.txt")
                         with open(mut_file, "w") as fh:
                             fh.write(mut_str)
-                        mut_pdb = build_mutant(pdb, mut_file, tmpdir)
+                        mut_pdb = build_mutant(pdb, mut_file, tmpdir, quiet=True)
                     else:
                         shutil.copy(pdb, os.path.join(tmpdir, "model.pdb"))
                         mut_pdb = os.path.join(tmpdir, "model.pdb")

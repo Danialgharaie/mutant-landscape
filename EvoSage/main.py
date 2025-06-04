@@ -6,6 +6,7 @@ import shutil
 from pathlib import Path
 from typing import Dict, List, Tuple, Any
 import datetime
+import numpy as np
 
 import pandas as pd
 
@@ -43,6 +44,12 @@ def parse_args() -> argparse.Namespace:
         "--log-level",
         default="INFO",
         help="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Random seed for reproducibility",
     )
     return parser.parse_args()
 
@@ -164,6 +171,9 @@ def compute_deltas(mut_metrics: Dict[str, Any], orig_metrics: Dict[str, Any]) ->
 def main() -> None:
     args = parse_args()
     setup_logging(args.log_level)
+    if args.seed is not None:
+        random.seed(args.seed)
+        np.random.seed(args.seed)
 
     wt_seq = args.wt_seq
     pdb = args.pdb

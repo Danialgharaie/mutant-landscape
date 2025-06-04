@@ -84,6 +84,9 @@ python -m EvoSage.main "<WT_SEQUENCE>" path/to/structure.pdb --generations 50
 Use `--help` to see all available options. The script prints the final Pareto
 front and can also write a CSV log when `--output_csv` is provided.
 
+The `--log-level` flag controls logging verbosity and `--seed` sets the
+Python and NumPy random seed for reproducible runs.
+
 When `--dynamic_prosst` is enabled, EvoSage recomputes the ProSST score matrix
 from the top sequence of each generation and updates the allowed mutation
 dictionary accordingly before continuing.

@@ -1,5 +1,6 @@
 import numpy as np
 import random
+from .prosst_additive import SINGLE_LETTER_CODES
 
 
 def _dominates(a, b):
@@ -138,9 +139,17 @@ def guided_mutate(seq, cand, p_m=0.08):
     Mutation probability per allowed position.
   """
   seq_list = list(seq)
+  mutated = False
   for pos, aa_choices in cand.items():
     if pos < 0 or pos >= len(seq_list):
       continue
     if aa_choices and random.random() < p_m:
       seq_list[pos] = random.choice(aa_choices)
+      mutated = True
+
+  if not cand or not mutated:
+    pos = random.randrange(len(seq_list))
+    fallback_choices = [aa for aa in SINGLE_LETTER_CODES if aa != seq_list[pos]]
+    seq_list[pos] = random.choice(fallback_choices)
+
   return "".join(seq_list)

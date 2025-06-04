@@ -1,6 +1,7 @@
 import subprocess
 import os
 import shutil
+from . import logger
 
 
 def build_mutant(pdb_fpath, mutant_file_path, output_dir):
@@ -51,19 +52,19 @@ def build_mutant(pdb_fpath, mutant_file_path, output_dir):
 
   # Run EvoEF2 from its own directory with relative paths to copied inputs
   cmd = [
-    "./" + os.path.basename(evoef2_path), # EvoEF2 executable name with relative path prefix
+    "./" + os.path.basename(evoef2_path),
     "--command=BuildMutant",
-    f"--pdb={temp_pdb_name}", # Relative path to copied PDB
-    f"--mutant_file={temp_mut_name}", # Relative path to copied mutant file
+    f"--pdb={temp_pdb_name}",
+    f"--mutant_file={temp_mut_name}",
   ]
-  print(f"Executing EvoEF2 command: {' '.join(cmd)}")
-  print(f"EvoEF2 working directory: {evoef2_dir}")
+  logger.debug("Executing EvoEF2 command: %s", ' '.join(cmd))
+  logger.debug("EvoEF2 working directory: %s", evoef2_dir)
 
   try:
     result = subprocess.run(cmd, cwd=evoef2_dir, check=True, capture_output=True, text=True)
-    print(f"EvoEF2 stdout:\n{result.stdout}")
+    logger.debug("EvoEF2 stdout:\n%s", result.stdout)
     if result.stderr:
-      print(f"EvoEF2 stderr:\n{result.stderr}")
+      logger.debug("EvoEF2 stderr:\n%s", result.stderr)
 
     # Get list of PDBs in evoef2_dir after running EvoEF2
     final_pdbs_in_evoef2_dir = {f for f in os.listdir(evoef2_dir) if f.endswith(".pdb")}

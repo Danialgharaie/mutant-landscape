@@ -1,6 +1,7 @@
 import os
 import subprocess
 import csv
+from . import logger
 
 def run_destress(pdb_dir):
   """Runs DeStReSS analysis on all PDB files in a directory and parses the results from its CSV output.
@@ -34,11 +35,12 @@ def run_destress(pdb_dir):
 
   # Run DeStReSS on the directory
   cmd = ["python3", destress_script, "--i", os.path.abspath(pdb_dir)]
+  logger.debug("Running De-StReSS: %s", ' '.join(cmd))
 
   try:
     result = subprocess.run(cmd, cwd=destress_dir, check=True, capture_output=True, text=True)
     if result.stderr:
-      print(f"DeStReSS stderr:\n{result.stderr}")
+      logger.debug("DeStReSS stderr:\n%s", result.stderr)
 
     # Find and parse the CSV file
     csv_files = [f for f in os.listdir(pdb_dir) if f.endswith('.csv')]
@@ -60,7 +62,7 @@ def run_destress(pdb_dir):
         if design_name:
           results[design_name] = dict(row)
         else:
-          print("Warning: No design name found in row. Keys:", row.keys())
+          logger.warning("No design name found in row. Keys: %s", list(row.keys()))
       return results
 
   except subprocess.CalledProcessError as e:

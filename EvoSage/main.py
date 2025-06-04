@@ -335,6 +335,7 @@ def main() -> None:
 
         if args.dynamic_prosst and fronts and fronts[0]:
             best_seq = fronts[0][0]["seq"]
+            logger.info("Updating ProSST using best sequence %s", best_seq)
             pdb_path = destress_cache[best_seq]["pdb_path"]
             scores = run_prosst(best_seq, pdb_path)
             allowed = _allowed_mutations(scores, args.neutral_th)

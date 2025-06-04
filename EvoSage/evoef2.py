@@ -4,7 +4,7 @@ import shutil
 from . import logger
 
 
-def build_mutant(pdb_fpath, mutant_file_path, output_dir):
+def build_mutant(pdb_fpath, mutant_file_path, output_dir, quiet: bool = True):
   """Builds mutant models using EvoEF2.
 
   Parameters
@@ -15,6 +15,8 @@ def build_mutant(pdb_fpath, mutant_file_path, output_dir):
     Path to file with mutations (format: "CA171A,DB180E;").
   output_dir : str
     Output directory for mutant PDB.
+  quiet : bool, optional
+    If True (default), suppress EvoEF2 command logging and output.
 
   Returns
   -------
@@ -57,14 +59,16 @@ def build_mutant(pdb_fpath, mutant_file_path, output_dir):
     f"--pdb={temp_pdb_name}",
     f"--mutant_file={temp_mut_name}",
   ]
-  logger.debug("Executing EvoEF2 command: %s", ' '.join(cmd))
-  logger.debug("EvoEF2 working directory: %s", evoef2_dir)
+  if not quiet:
+    logger.info("Executing EvoEF2 command: %s", ' '.join(cmd))
+    logger.info("EvoEF2 working directory: %s", evoef2_dir)
 
   try:
     result = subprocess.run(cmd, cwd=evoef2_dir, check=True, capture_output=True, text=True)
-    logger.debug("EvoEF2 stdout:\n%s", result.stdout)
-    if result.stderr:
-      logger.debug("EvoEF2 stderr:\n%s", result.stderr)
+    if not quiet:
+      logger.info("EvoEF2 stdout:\n%s", result.stdout)
+      if result.stderr:
+        logger.info("EvoEF2 stderr:\n%s", result.stderr)
 
     # Get list of PDBs in evoef2_dir after running EvoEF2
     final_pdbs_in_evoef2_dir = {f for f in os.listdir(evoef2_dir) if f.endswith(".pdb")}

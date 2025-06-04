@@ -191,10 +191,19 @@ def main() -> None:
             i: [aa for aa in SINGLE_LETTER_CODES if aa != wt_seq[i]]
             for i in range(len(wt_seq))
         }
-    pop: List[str] = [wt_seq]
-    pop.extend(_good_single_mutants(scores, wt_seq, args.beneficial_th))
+    pop: List[str] = []
+    seen_global: set[str] = {wt_seq}
+
+    for seq in _good_single_mutants(scores, wt_seq, args.beneficial_th):
+        if seq != wt_seq and seq not in seen_global:
+            pop.append(seq)
+            seen_global.add(seq)
+
     while len(pop) < args.pop_size:
-        pop.append(_rand_combination(wt_seq, allowed, args.max_k))
+        cand = _rand_combination(wt_seq, allowed, args.max_k)
+        if cand != wt_seq and cand not in seen_global:
+            pop.append(cand)
+            seen_global.add(cand)
 
     run_root = args.out_dir or f"run_{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
     Path(run_root).mkdir(parents=True, exist_ok=True)
@@ -228,6 +237,8 @@ def main() -> None:
 
     for gen in range(args.generations):
         logger.info("Starting generation %d", gen)
+        pop = [seq for i, seq in enumerate(pop) if seq != wt_seq and seq not in pop[:i]]
+        seen_global.update(pop)
         gen_dir = Path(run_root) / f"generation_{gen:02d}"
         mutants_dir = gen_dir / "mutants"
         mutants_dir.mkdir(parents=True, exist_ok=True)
@@ -323,13 +334,38 @@ def main() -> None:
         fronts = nsga2_sort(pop, score_list)
         elite = elitist_selection(fronts, keep=args.pop_size)
         elite = enforce_diversity(elite)
-        new_pop = [cand["seq"] for cand in elite]
-        while len(new_pop) < args.pop_size:
+        new_pop: List[str] = []
+        next_seen: set[str] = set()
+        for cand in elite:
+            seq = cand["seq"]
+            if seq == wt_seq or seq in seen_global or seq in next_seen:
+                continue
+            new_pop.append(seq)
+            next_seen.add(seq)
+
+        attempts = 0
+        max_attempts = args.pop_size * 10
+        while len(new_pop) < args.pop_size and attempts < max_attempts:
             parent = tournament(elite)
+            if parent is None:
+                break
             child = guided_mutate(parent, allowed)
+            attempts += 1
+            if child == wt_seq or child in seen_global or child in next_seen:
+                continue
             logger.debug("Selected candidate %s", child)
             new_pop.append(child)
+            next_seen.add(child)
+
+        while len(new_pop) < args.pop_size:
+            cand = _rand_combination(wt_seq, allowed, args.max_k)
+            if cand == wt_seq or cand in seen_global or cand in next_seen:
+                continue
+            new_pop.append(cand)
+            next_seen.add(cand)
+
         pop = new_pop
+        seen_global.update(pop)
 
         logger.info("Finished generation %d", gen)
 

@@ -20,6 +20,7 @@ from .ga_utils import (
 from .evoef2 import build_mutant
 from .eval import run_destress
 from .scoring import compute_additive_score
+from . import logger, setup_logging
 
 
 def parse_args() -> argparse.Namespace:
@@ -37,6 +38,11 @@ def parse_args() -> argparse.Namespace:
         "--dynamic_prosst",
         action="store_true",
         help="Recompute ProSST score matrix using best sequence each generation",
+    )
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        help="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
     )
     return parser.parse_args()
 
@@ -157,9 +163,16 @@ def compute_deltas(mut_metrics: Dict[str, Any], orig_metrics: Dict[str, Any]) ->
 
 def main() -> None:
     args = parse_args()
+    setup_logging(args.log_level)
 
     wt_seq = args.wt_seq
     pdb = args.pdb
+
+    logger.info(
+        "Starting EvoSage run: pop_size=%d, generations=%d",
+        args.pop_size,
+        args.generations,
+    )
 
     scores = run_prosst(wt_seq, pdb)
     allowed = _allowed_mutations(scores, args.neutral_th)
@@ -204,6 +217,7 @@ def main() -> None:
     final_df: pd.DataFrame | None = None
 
     for gen in range(args.generations):
+        logger.info("Starting generation %d", gen)
         gen_dir = Path(run_root) / f"generation_{gen:02d}"
         mutants_dir = gen_dir / "mutants"
         mutants_dir.mkdir(parents=True, exist_ok=True)
@@ -216,7 +230,7 @@ def main() -> None:
                 mut_str = _mutfile_from_seq(seq, wt_seq)
                 with tempfile.TemporaryDirectory() as tmpdir:
                     if mut_str and mut_str != ";":
-                        print(mut_str)
+                        logger.debug(mut_str)
                         mut_file = os.path.join(tmpdir, "mut.txt")
                         with open(mut_file, "w") as fh:
                             fh.write(mut_str)
@@ -296,8 +310,11 @@ def main() -> None:
         while len(new_pop) < args.pop_size:
             parent = tournament(elite)
             child = guided_mutate(parent, allowed)
+            logger.debug("Selected candidate %s", child)
             new_pop.append(child)
         pop = new_pop
+
+        logger.info("Finished generation %d", gen)
 
         if args.dynamic_prosst and fronts and fronts[0]:
             best_seq = fronts[0][0]["seq"]
@@ -324,17 +341,18 @@ def main() -> None:
         )
         best_front = final_fronts[0]
 
-        print("Final Pareto Front:")
+        logger.info("Final Pareto Front:")
         for cand in best_front:
             seq = cand["seq"]
             add = compute_additive_score(seq, scores)
             z = destress_cache[seq]["z"]
-            print(
+            logger.info(
+                "%s Additive: %.3f Stab_z: %.3f Core_z: %.3f Sol_z: %.3f",
                 seq,
-                f"Additive: {add:.3f}",
-                f"Stab_z: {z['Stability_z']:.3f}",
-                f"Core_z: {z['CoreQuality_z']:.3f}",
-                f"Sol_z: {z['Solubility_z']:.3f}",
+                add,
+                z['Stability_z'],
+                z['CoreQuality_z'],
+                z['Solubility_z'],
             )
 
     if args.output_csv:

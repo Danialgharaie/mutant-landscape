@@ -283,6 +283,13 @@ def main() -> None:
 
         df.insert(0, "gen", gen)
         df.to_csv(gen_dir / "metrics_with_delta.csv", index=False)
+
+        # Save sequences for this generation to a FASTA file
+        fasta_path = gen_dir / "population.fasta"
+        with open(fasta_path, "w") as fh:
+            for i, seq in enumerate(df["seq"], start=1):
+                fh.write(f">seq{i}\n{seq}\n")
+
         final_df = df
 
         score_list = []

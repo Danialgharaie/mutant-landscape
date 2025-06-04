@@ -33,6 +33,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--neutral_th", type=float, default=0.0, help="Threshold for nearly-neutral single mutants")
     parser.add_argument("--output_csv", help="Optional CSV output path")
     parser.add_argument("--out_dir", help="Directory to store per-generation results")
+    parser.add_argument(
+        "--dynamic_prosst",
+        action="store_true",
+        help="Recompute ProSST score matrix using best sequence each generation",
+    )
     return parser.parse_args()
 
 
@@ -293,6 +298,17 @@ def main() -> None:
             child = guided_mutate(parent, allowed)
             new_pop.append(child)
         pop = new_pop
+
+        if args.dynamic_prosst and fronts and fronts[0]:
+            best_seq = fronts[0][0]["seq"]
+            pdb_path = destress_cache[best_seq]["pdb_path"]
+            scores = run_prosst(best_seq, pdb_path)
+            allowed = _allowed_mutations(scores, args.neutral_th)
+            if not allowed:
+                allowed = {
+                    i: [aa for aa in SINGLE_LETTER_CODES if aa != best_seq[i]]
+                    for i in range(len(best_seq))
+                }
 
     if final_df is not None:
         final_fronts = nsga2_sort(

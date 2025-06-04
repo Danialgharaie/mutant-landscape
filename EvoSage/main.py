@@ -349,8 +349,12 @@ def main() -> None:
         best_front = final_fronts[0]
 
         logger.info("Final Pareto Front:")
+        seen: set[str] = set()  # filter out duplicate sequences
         for cand in best_front:
             seq = cand["seq"]
+            if seq in seen:
+                continue
+            seen.add(seq)
             add = compute_additive_score(seq, scores)
             z = destress_cache[seq]["z"]
             logger.info(
@@ -363,7 +367,15 @@ def main() -> None:
             )
 
     if args.output_csv:
-        history_df = pd.DataFrame(history)
+        seen_csv: set[str] = set()  # remove duplicate sequences
+        unique_rows = []
+        for row in history:
+            seq = row["seq"]
+            if seq in seen_csv:
+                continue
+            seen_csv.add(seq)
+            unique_rows.append(row)
+        history_df = pd.DataFrame(unique_rows)
         history_df.to_csv(args.output_csv, index=False)
 
 

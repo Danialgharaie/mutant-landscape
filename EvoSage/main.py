@@ -64,6 +64,12 @@ def _good_single_mutants(scores: pd.DataFrame, wt_seq: str, thr: float) -> List[
 
 def _rand_combination(wt_seq: str, allowed: Dict[int, List[str]], max_k: int) -> str:
     seq = list(wt_seq)
+    if not allowed:
+        pos = random.randrange(len(seq))
+        aa_choices = [aa for aa in SINGLE_LETTER_CODES if aa != wt_seq[pos]]
+        seq[pos] = random.choice(aa_choices)
+        return "".join(seq)
+
     num_mut = random.randint(1, max_k)
     positions = random.sample(list(allowed.keys()), min(num_mut, len(allowed)))
     for p in positions:
@@ -152,6 +158,11 @@ def main() -> None:
 
     scores = run_prosst(wt_seq, pdb)
     allowed = _allowed_mutations(scores, args.neutral_th)
+    if not allowed:
+        allowed = {
+            i: [aa for aa in SINGLE_LETTER_CODES if aa != wt_seq[i]]
+            for i in range(len(wt_seq))
+        }
     pop: List[str] = [wt_seq]
     pop.extend(_good_single_mutants(scores, wt_seq, args.beneficial_th))
     while len(pop) < args.pop_size:

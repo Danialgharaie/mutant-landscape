@@ -63,6 +63,18 @@ def run_destress(pdb_dir):
           results[design_name] = dict(row)
         else:
           logger.warning("No design name found in row. Keys: %s", list(row.keys()))
+
+      if not results:
+        raise RuntimeError("DeStReSS produced no results")
+
+      ignore_keys = {'design name', 'design_name', 'file_name', 'file name'}
+      for name, metrics in results.items():
+        values = [v for k, v in metrics.items() if k not in ignore_keys]
+        if not any(v not in (None, '', 'NA') for v in values):
+          raise RuntimeError(
+            f"DeStReSS returned empty metrics for {name}.\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+          )
+
       return results
 
   except subprocess.CalledProcessError as e:

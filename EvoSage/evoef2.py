@@ -4,6 +4,35 @@ import shutil
 from . import logger
 
 
+def _ensure_b_factors(pdb_path: str) -> None:
+  """Ensure B-factor values are present in ATOM/HETATM records.
+
+  De-StReSS's PDB parser fails when the B-factor column is empty. EvoEF2
+  outputs mutant structures without B-factors, so this helper fills missing
+  values with ``0.00`` in-place.
+
+  Parameters
+  ----------
+  pdb_path : str
+      Path to the PDB file to modify.
+  """
+  try:
+    with open(pdb_path, "r") as fh:
+      lines = fh.readlines()
+    new_lines = []
+    for line in lines:
+      if line.startswith(("ATOM", "HETATM")):
+        if len(line) < 66:
+          line = line.rstrip("\n").ljust(66) + "\n"
+        if not line[60:66].strip():
+          line = line[:60] + " 0.00" + line[66:]
+      new_lines.append(line)
+    with open(pdb_path, "w") as fh:
+      fh.writelines(new_lines)
+  except Exception as exc:
+    logger.debug("Failed to patch B-factors for %s: %s", pdb_path, exc)
+
+
 def build_mutant(pdb_fpath, mutant_file_path, output_dir, quiet: bool = True):
   """Builds mutant models using EvoEF2.
 
@@ -87,6 +116,8 @@ def build_mutant(pdb_fpath, mutant_file_path, output_dir, quiet: bool = True):
     # Move the generated PDB to the intended output_dir
     final_pdb_path = os.path.join(output_dir, os.path.basename(generated_pdb_path_in_evoef2_dir))
     shutil.move(generated_pdb_path_in_evoef2_dir, final_pdb_path)
+
+    _ensure_b_factors(final_pdb_path)
 
     return final_pdb_path
 

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Any
 import datetime
 import numpy as np
+from tqdm.auto import tqdm
 
 import pandas as pd
 
@@ -254,7 +255,7 @@ def main() -> None:
     history: List[Dict[str, Any]] = []
     final_df: pd.DataFrame | None = None
 
-    for gen in range(args.generations):
+    for gen in tqdm(range(args.generations), desc="Generation"):
         logger.info("Starting generation %d", gen)
         pop = [seq for i, seq in enumerate(pop) if seq != wt_seq and seq not in pop[:i]]
         seen_global.update(pop)
@@ -385,6 +386,20 @@ def main() -> None:
 
         pop = new_pop
         seen_global.update(pop)
+
+        best_idx = df['additive'].idxmax()
+        best_row = df.loc[best_idx]
+        logger.info(
+            "Generation %d summary: pop=%d unique=%d best_seq=%s add=%.3f Stab_z=%.3f Core_z=%.3f Sol_z=%.3f",
+            gen,
+            len(df),
+            df['seq'].nunique(),
+            best_row.seq,
+            best_row.additive,
+            best_row.Stability_z,
+            best_row.CoreQuality_z,
+            best_row.Solubility_z,
+        )
 
         logger.info("Finished generation %d", gen)
 

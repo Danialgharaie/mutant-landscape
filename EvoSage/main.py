@@ -342,9 +342,23 @@ def main() -> None:
             pop.append(seq)
             seen_global.add(seq)
 
-    while len(pop) < args.pop_size:
+    attempts = 0
+    max_attempts = args.pop_size * 10
+    while len(pop) < args.pop_size and attempts < max_attempts:
         cand = _rand_combination(wt_seq, allowed, args.max_k, fallback_rank)
+        attempts += 1
         if cand != wt_seq and cand not in seen_global:
+            pop.append(cand)
+            seen_global.add(cand)
+
+    if len(pop) < args.pop_size:
+        logger.warning(
+            "Unable to generate enough unique initial sequences after %d attempts. "
+            "Filling remaining population with possible duplicates.",
+            attempts,
+        )
+        while len(pop) < args.pop_size:
+            cand = _rand_combination(wt_seq, allowed, args.max_k, fallback_rank)
             pop.append(cand)
             seen_global.add(cand)
 
@@ -548,12 +562,26 @@ def main() -> None:
             new_pop.append(child)
             next_seen.add(child)
 
-        while len(new_pop) < args.pop_size:
+        attempts = 0
+        max_attempts_rand = args.pop_size * 10
+        while len(new_pop) < args.pop_size and attempts < max_attempts_rand:
             cand = _rand_combination(wt_seq, allowed, args.max_k, fallback_rank)
+            attempts += 1
             if cand == wt_seq or cand in seen_global or cand in next_seen:
                 continue
             new_pop.append(cand)
             next_seen.add(cand)
+
+        if len(new_pop) < args.pop_size:
+            logger.warning(
+                "Unable to generate enough unique sequences after %d attempts. "
+                "Filling remaining slots with possible duplicates.",
+                attempts,
+            )
+            while len(new_pop) < args.pop_size:
+                cand = _rand_combination(wt_seq, allowed, args.max_k, fallback_rank)
+                new_pop.append(cand)
+                next_seen.add(cand)
 
         pop = new_pop
         seen_global.update(pop)
@@ -598,12 +626,26 @@ def main() -> None:
             scores = new_scores
             pop = [best_overall_seq]
             seen_global.add(best_overall_seq)
-            while len(pop) < args.pop_size:
+            attempts = 0
+            max_attempts_reset = args.pop_size * 10
+            while len(pop) < args.pop_size and attempts < max_attempts_reset:
                 cand = _rand_combination(best_overall_seq, allowed, args.max_k, fallback_rank)
+                attempts += 1
                 if cand == best_overall_seq or cand in seen_global or cand in pop:
                     continue
                 pop.append(cand)
                 seen_global.add(cand)
+
+            if len(pop) < args.pop_size:
+                logger.warning(
+                    "Unable to generate enough unique reset sequences after %d attempts. "
+                    "Filling remaining slots with possible duplicates.",
+                    attempts,
+                )
+                while len(pop) < args.pop_size:
+                    cand = _rand_combination(best_overall_seq, allowed, args.max_k, fallback_rank)
+                    pop.append(cand)
+                    seen_global.add(cand)
 
         logger.info("Finished generation %d", gen)
 

@@ -398,12 +398,11 @@ def main() -> None:
         mutants_dir.mkdir(parents=True, exist_ok=True)
 
         gen_rows: List[Dict[str, Any]] = []
-        destress_pending: List[Tuple[str, Path, Path, float]] = []
+        destress_pending: List[Tuple[str, Path, float]] = []
 
         for idx, seq in enumerate(pop):
             add_score = compute_additive_score(seq, scores)
             dest_pdb = mutants_dir / f"mut_{idx:04d}.pdb"
-            dest_csv = mutants_dir / f"mut_{idx:04d}_destress.csv"
             if seq not in destress_cache:
                 mut_str = _mutfile_from_seq(seq, wt_seq)
                 with tempfile.TemporaryDirectory() as tmpdir:
@@ -417,11 +416,10 @@ def main() -> None:
                         shutil.copy(pdb, os.path.join(tmpdir, "model.pdb"))
                         mut_pdb = os.path.join(tmpdir, "model.pdb")
                     shutil.move(mut_pdb, dest_pdb)
-                destress_pending.append((seq, dest_pdb, dest_csv, add_score))
+                destress_pending.append((seq, dest_pdb, add_score))
             else:
                 data = destress_cache[seq]
                 shutil.copy(data["pdb_path"], dest_pdb)
-                shutil.copy(data["csv_path"], dest_csv)
                 entry = {
                     "seq": seq,
                     "additive": add_score,
@@ -432,14 +430,15 @@ def main() -> None:
 
         if destress_pending:
             with tempfile.TemporaryDirectory() as tmpdir:
-                for _, pdb_path, _, _ in destress_pending:
+                for _, pdb_path, _ in destress_pending:
                     shutil.copy(pdb_path, os.path.join(tmpdir, os.path.basename(pdb_path)))
                 metrics_dict = run_destress(tmpdir)
                 csv_files = [f for f in os.listdir(tmpdir) if f.endswith(".csv")]
                 latest_csv = max(csv_files, key=lambda x: os.path.getctime(os.path.join(tmpdir, x)))
                 csv_src = os.path.join(tmpdir, latest_csv)
-                for seq, pdb_path, csv_path, add_score in destress_pending:
-                    shutil.copy(csv_src, csv_path)
+                destress_out = gen_dir / "destress.csv"
+                shutil.move(csv_src, destress_out)
+                for seq, pdb_path, add_score in destress_pending:
                     mut_metrics = metrics_dict.get(os.path.basename(pdb_path))
                     if mut_metrics is None:
                         raise RuntimeError(f"DeStReSS metrics missing for {pdb_path}")
@@ -448,7 +447,7 @@ def main() -> None:
                         "delta": deltas,
                         "score": scores_dict,
                         "pdb_path": str(pdb_path),
-                        "csv_path": str(csv_path),
+                        "csv_path": str(destress_out),
                     }
                     entry = {
                         "seq": seq,

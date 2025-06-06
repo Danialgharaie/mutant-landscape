@@ -453,9 +453,14 @@ def main() -> None:
                 destress_out = gen_dir / "destress.csv"
                 shutil.move(csv_src, destress_out)
                 for seq, pdb_path, add_score in destress_pending:
-                    mut_metrics = metrics_dict.get(os.path.basename(pdb_path))
+                    key = os.path.basename(pdb_path)
+                    mut_metrics = metrics_dict.get(key)
                     if mut_metrics is None:
-                        raise RuntimeError(f"DeStReSS metrics missing for {pdb_path}")
+                        mut_metrics = metrics_dict.get(os.path.splitext(key)[0])
+                    if mut_metrics is None:
+                        raise RuntimeError(
+                            f"DeStReSS metrics missing for {pdb_path}"
+                        )
                     deltas, scores_dict = compute_deltas(mut_metrics, orig_metrics)
                     destress_cache[seq] = {
                         "delta": deltas,

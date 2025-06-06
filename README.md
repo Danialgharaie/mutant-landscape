@@ -87,6 +87,10 @@ front and can also write a CSV log when `--output_csv` is provided.
 The `--log-level` flag controls logging verbosity and `--seed` sets the
 Python and NumPy random seed for reproducible runs.
 
+`--patience` specifies how many generations the algorithm tolerates without an
+improved additive score. Once the limit is reached, the population is reset
+around the best sequence found so far.
+
 When `--dynamic_prosst` is enabled, EvoSage recomputes the ProSST score matrix
 from the top sequence of each generation and updates the allowed mutation
 dictionary accordingly before continuing.

@@ -106,3 +106,12 @@ plot_final_scatter("run_history.csv", "plots")
 ```
 
 `plot_history` shows how the average additive and z-score metrics evolve per generation, while `plot_final_scatter` plots a pairwise scatter matrix for the last generation.
+
+## Advanced GA Options
+
+When the search stagnates for `--patience` generations, EvoSage now rebuilds the
+ProSST fitness matrix around the best sequence found so far. The allowed mutation
+dictionary is recalculated from this new matrix and subsequent additive scoring
+uses the updated values. This helps the algorithm escape local optima by
+re-seeding the population with mutations that are neutral or beneficial relative
+to the new best sequence.

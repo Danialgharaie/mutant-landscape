@@ -425,6 +425,15 @@ def main() -> None:
                 best_overall_seq,
             )
             stale_count = 0
+            pdb_path = destress_cache[best_overall_seq]["pdb_path"]
+            new_scores = run_prosst(best_overall_seq, pdb_path)
+            allowed = _allowed_mutations(new_scores, args.neutral_th)
+            if not allowed:
+                allowed = {
+                    i: [aa for aa in SINGLE_LETTER_CODES if aa != best_overall_seq[i]]
+                    for i in range(len(best_overall_seq))
+                }
+            scores = new_scores
             pop = [best_overall_seq]
             seen_global.add(best_overall_seq)
             while len(pop) < args.pop_size:

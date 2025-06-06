@@ -127,6 +127,14 @@ def tournament(pop, k=3):
   return contenders[0]["seq"] if isinstance(contenders[0], dict) else contenders[0]
 
 
+def crossover(parent1, parent2):
+  """Return a child produced by uniform crossover of two parent sequences."""
+  if len(parent1) != len(parent2):
+    raise ValueError("Parents must be the same length")
+  child = [p1 if random.random() < 0.5 else p2 for p1, p2 in zip(parent1, parent2)]
+  return "".join(child)
+
+
 def rank_negative_sites(scores: pd.DataFrame) -> list[int]:
   """Return positions ranked by count and sum of negative ProSST scores.
 

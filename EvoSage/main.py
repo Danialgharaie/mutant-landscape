@@ -17,6 +17,7 @@ from .ga_utils import (
     elitist_selection,
     enforce_diversity,
     tournament,
+    crossover,
     guided_mutate,
     rank_negative_sites,
 )
@@ -70,6 +71,12 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=0.08,
         help="Mutation probability per allowed position",
+    )
+    parser.add_argument(
+        "--crossover_rate",
+        type=float,
+        default=0.5,
+        help="Probability of applying crossover when generating offspring",
     )
     parser.add_argument(
         "--log-level",
@@ -390,11 +397,16 @@ def main() -> None:
         attempts = 0
         max_attempts = args.pop_size * 10
         while len(new_pop) < args.pop_size and attempts < max_attempts:
-            parent = tournament(elite)
-            if parent is None:
+            parent1 = tournament(elite)
+            parent2 = tournament(elite)
+            if parent1 is None or parent2 is None:
                 break
+            if random.random() < args.crossover_rate:
+                child = crossover(parent1, parent2)
+            else:
+                child = parent1
             child = guided_mutate(
-                parent,
+                child,
                 allowed,
                 p_m=args.mutation_prob,
                 fallback_rank=fallback_rank,

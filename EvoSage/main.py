@@ -66,6 +66,12 @@ def parse_args() -> argparse.Namespace:
         help="Recompute ProSST score matrix using best sequence each generation",
     )
     parser.add_argument(
+        "--mutation_prob",
+        type=float,
+        default=0.08,
+        help="Mutation probability per allowed position",
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
         help="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
@@ -387,7 +393,12 @@ def main() -> None:
             parent = tournament(elite)
             if parent is None:
                 break
-            child = guided_mutate(parent, allowed, fallback_rank=fallback_rank)
+            child = guided_mutate(
+                parent,
+                allowed,
+                p_m=args.mutation_prob,
+                fallback_rank=fallback_rank,
+            )
             attempts += 1
             if child == wt_seq or child in seen_global or child in next_seen:
                 continue

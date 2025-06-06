@@ -94,6 +94,9 @@ around the best sequence found so far.
 When `--dynamic_prosst` is enabled, EvoSage recomputes the ProSST score matrix
 from the top sequence of each generation and updates the allowed mutation
 dictionary accordingly before continuing.
+`--mutation_prob` controls the per-site mutation probability used when
+generating new candidates (default `0.08`). Higher values explore more mutations
+each generation.
 
 ## Plotting Results
 

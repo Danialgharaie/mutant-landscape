@@ -18,6 +18,7 @@ from .ga_utils import (
     enforce_diversity,
     tournament,
     guided_mutate,
+    rank_negative_sites,
 )
 from .evoef2 import build_mutant
 from .eval import run_destress
@@ -104,10 +105,16 @@ def _good_single_mutants(scores: pd.DataFrame, wt_seq: str, thr: float) -> List[
     return seqs
 
 
-def _rand_combination(wt_seq: str, allowed: Dict[int, List[str]], max_k: int) -> str:
+def _rand_combination(
+    wt_seq: str, allowed: Dict[int, List[str]], max_k: int, fallback_rank: List[int] | None = None
+) -> str:
     seq = list(wt_seq)
     if not allowed:
-        pos = random.randrange(len(seq))
+        if fallback_rank:
+            top_n = max(1, len(fallback_rank) // 4)
+            pos = random.choice(fallback_rank[:top_n])
+        else:
+            pos = random.randrange(len(seq))
         aa_choices = [aa for aa in SINGLE_LETTER_CODES if aa != wt_seq[pos]]
         seq[pos] = random.choice(aa_choices)
         return "".join(seq)
@@ -212,6 +219,7 @@ def main() -> None:
 
     scores = run_prosst(wt_seq, pdb)
     allowed = _allowed_mutations(scores, args.neutral_th)
+    fallback_rank = rank_negative_sites(scores)
     if not allowed:
         allowed = {
             i: [aa for aa in SINGLE_LETTER_CODES if aa != wt_seq[i]]
@@ -226,7 +234,7 @@ def main() -> None:
             seen_global.add(seq)
 
     while len(pop) < args.pop_size:
-        cand = _rand_combination(wt_seq, allowed, args.max_k)
+        cand = _rand_combination(wt_seq, allowed, args.max_k, fallback_rank)
         if cand != wt_seq and cand not in seen_global:
             pop.append(cand)
             seen_global.add(cand)
@@ -379,7 +387,7 @@ def main() -> None:
             parent = tournament(elite)
             if parent is None:
                 break
-            child = guided_mutate(parent, allowed)
+            child = guided_mutate(parent, allowed, fallback_rank=fallback_rank)
             attempts += 1
             if child == wt_seq or child in seen_global or child in next_seen:
                 continue
@@ -388,7 +396,7 @@ def main() -> None:
             next_seen.add(child)
 
         while len(new_pop) < args.pop_size:
-            cand = _rand_combination(wt_seq, allowed, args.max_k)
+            cand = _rand_combination(wt_seq, allowed, args.max_k, fallback_rank)
             if cand == wt_seq or cand in seen_global or cand in next_seen:
                 continue
             new_pop.append(cand)
@@ -428,6 +436,7 @@ def main() -> None:
             pdb_path = destress_cache[best_overall_seq]["pdb_path"]
             new_scores = run_prosst(best_overall_seq, pdb_path)
             allowed = _allowed_mutations(new_scores, args.neutral_th)
+            fallback_rank = rank_negative_sites(new_scores)
             if not allowed:
                 allowed = {
                     i: [aa for aa in SINGLE_LETTER_CODES if aa != best_overall_seq[i]]
@@ -437,7 +446,7 @@ def main() -> None:
             pop = [best_overall_seq]
             seen_global.add(best_overall_seq)
             while len(pop) < args.pop_size:
-                cand = _rand_combination(best_overall_seq, allowed, args.max_k)
+                cand = _rand_combination(best_overall_seq, allowed, args.max_k, fallback_rank)
                 if cand == best_overall_seq or cand in seen_global or cand in pop:
                     continue
                 pop.append(cand)
@@ -451,6 +460,7 @@ def main() -> None:
             pdb_path = destress_cache[best_seq]["pdb_path"]
             scores = run_prosst(best_seq, pdb_path)
             allowed = _allowed_mutations(scores, args.neutral_th)
+            fallback_rank = rank_negative_sites(scores)
             if not allowed:
                 allowed = {
                     i: [aa for aa in SINGLE_LETTER_CODES if aa != best_seq[i]]

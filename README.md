@@ -81,6 +81,40 @@ genetic algorithm with:
 python -m EvoSage.main "<WT_SEQUENCE>" path/to/structure.pdb --generations 50
 ```
 
+Alternatively, provide the parameters in a JSON file and pass it via
+`--config`. Every command-line option can be specified as a key. Any field
+omitted from the JSON keeps the default value printed by `--help`.
+
+```json
+{
+  "wt_seq": "ACDE...",
+  "pdb": "path/to/structure.pdb",
+  "pop_size": 50,
+  "max_k": 4,
+  "generations": 20,
+  "patience": 10,
+  "beneficial_th": 0.5,
+  "neutral_th": 0.0,
+  "out_dir": "results",
+  "dynamic_prosst": false,
+  "mutation_prob": 0.08,
+  "pm_start": null,
+  "pm_min": null,
+  "pm_decay": 1.0,
+  "diversity_thresh": 0.0,
+  "crossover_rate": 0.5,
+  "log_level": "INFO",
+  "seed": null
+}
+```
+
+Run the search with:
+
+```bash
+python -m EvoSage.main --config config.json
+```
+Any CLI flags override values from the JSON file.
+
 Use `--help` to see all available options. The script prints the final Pareto
 front and always writes a `history.csv` log inside the run directory.
 

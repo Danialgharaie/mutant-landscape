@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import random
 import tempfile
@@ -46,74 +47,140 @@ def ascii_splash():
     print(ascii_art)
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="EvoSage evolutionary search")
-    parser.add_argument("wt_seq", help="Wild-type amino acid sequence")
-    parser.add_argument("pdb", help="Path to wild-type PDB file")
-    parser.add_argument("--pop_size", type=int, default=50, help="Population size")
-    parser.add_argument("--max_k", type=int, default=4, help="Maximum number of simultaneous mutations")
-    parser.add_argument("--generations", type=int, default=20, help="Number of generations to run")
+    """Parse command line arguments and optional JSON configuration."""
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument(
+        "--config",
+        help="Path to JSON configuration file. Values here provide defaults.",
+    )
+
+    # Parse only --config first so we know whether to load defaults from a file
+    pre_args, _ = pre.parse_known_args()
+
+    config_data: dict[str, Any] = {}
+    if pre_args.config:
+        with open(pre_args.config) as fh:
+            config_data = json.load(fh)
+
+    parser = argparse.ArgumentParser(
+        description="EvoSage evolutionary search",
+        parents=[pre],
+    )
+    parser.add_argument(
+        "wt_seq",
+        nargs="?",
+        default=config_data.get("wt_seq"),
+        help="Wild-type amino acid sequence",
+    )
+    parser.add_argument(
+        "pdb",
+        nargs="?",
+        default=config_data.get("pdb"),
+        help="Path to wild-type PDB file",
+    )
+    parser.add_argument(
+        "--pop_size",
+        type=int,
+        default=config_data.get("pop_size", 50),
+        help="Population size",
+    )
+    parser.add_argument(
+        "--max_k",
+        type=int,
+        default=config_data.get("max_k", 4),
+        help="Maximum number of simultaneous mutations",
+    )
+    parser.add_argument(
+        "--generations",
+        type=int,
+        default=config_data.get("generations", 20),
+        help="Number of generations to run",
+    )
     parser.add_argument(
         "--patience",
         type=int,
-        default=10,
+        default=config_data.get("patience", 10),
         help="Generations with no additive improvement before population reset",
     )
-    parser.add_argument("--beneficial_th", type=float, default=0.5, help="Threshold for beneficial single mutants")
-    parser.add_argument("--neutral_th", type=float, default=0.0, help="Threshold for nearly-neutral single mutants")
-    parser.add_argument("--out_dir", help="Directory to store per-generation results")
+    parser.add_argument(
+        "--beneficial_th",
+        type=float,
+        default=config_data.get("beneficial_th", 0.5),
+        help="Threshold for beneficial single mutants",
+    )
+    parser.add_argument(
+        "--neutral_th",
+        type=float,
+        default=config_data.get("neutral_th", 0.0),
+        help="Threshold for nearly-neutral single mutants",
+    )
+    parser.add_argument(
+        "--out_dir",
+        default=config_data.get("out_dir"),
+        help="Directory to store per-generation results",
+    )
     parser.add_argument(
         "--dynamic_prosst",
         action="store_true",
+        default=config_data.get("dynamic_prosst", False),
         help="Recompute ProSST score matrix using best sequence each generation",
     )
     parser.add_argument(
         "--mutation_prob",
         type=float,
-        default=0.08,
+        default=config_data.get("mutation_prob", 0.08),
         help="Mutation probability per allowed position",
     )
     parser.add_argument(
         "--pm-start",
         type=float,
-        default=None,
+        dest="pm_start",
+        default=config_data.get("pm_start"),
         help="Starting mutation probability for adaptive schedule",
     )
     parser.add_argument(
         "--pm-min",
         type=float,
-        default=None,
+        dest="pm_min",
+        default=config_data.get("pm_min"),
         help="Minimum mutation probability when adapting",
     )
     parser.add_argument(
         "--pm-decay",
         type=float,
-        default=1.0,
+        default=config_data.get("pm_decay", 1.0),
         help="Multiplicative decay factor for adaptive mutation probability",
     )
     parser.add_argument(
         "--diversity-thresh",
         type=float,
-        default=0.0,
+        dest="diversity_thresh",
+        default=config_data.get("diversity_thresh", 0.0),
         help="Diversity threshold to trigger mutation rate decay",
     )
     parser.add_argument(
         "--crossover_rate",
         type=float,
-        default=0.5,
+        default=config_data.get("crossover_rate", 0.5),
         help="Probability of applying crossover when generating offspring",
     )
     parser.add_argument(
         "--log-level",
-        default="INFO",
+        dest="log_level",
+        default=config_data.get("log_level", "INFO"),
         help="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
     )
     parser.add_argument(
         "--seed",
         type=int,
-        default=None,
+        default=config_data.get("seed"),
         help="Random seed for reproducibility",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(namespace=argparse.Namespace(**config_data))
+
+    if args.wt_seq is None or args.pdb is None:
+        parser.error("wt_seq and pdb must be provided either via CLI or JSON config")
+
     if args.pm_start is None:
         args.pm_start = args.mutation_prob
     if args.pm_min is None:

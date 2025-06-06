@@ -49,6 +49,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pop_size", type=int, default=50, help="Population size")
     parser.add_argument("--max_k", type=int, default=4, help="Maximum number of simultaneous mutations")
     parser.add_argument("--generations", type=int, default=20, help="Number of generations to run")
+    parser.add_argument(
+        "--patience",
+        type=int,
+        default=10,
+        help="Generations with no additive improvement before population reset",
+    )
     parser.add_argument("--beneficial_th", type=float, default=0.5, help="Threshold for beneficial single mutants")
     parser.add_argument("--neutral_th", type=float, default=0.0, help="Threshold for nearly-neutral single mutants")
     parser.add_argument("--output_csv", help="Optional CSV output path")
@@ -255,6 +261,10 @@ def main() -> None:
     history: List[Dict[str, Any]] = []
     final_df: pd.DataFrame | None = None
 
+    best_overall_seq = wt_seq
+    best_overall_score = compute_additive_score(wt_seq, scores)
+    stale_count = 0
+
     for gen in tqdm(range(args.generations), desc="Generation"):
         logger.info("Starting generation %d", gen)
         pop = [seq for i, seq in enumerate(pop) if seq != wt_seq and seq not in pop[:i]]
@@ -400,6 +410,29 @@ def main() -> None:
             best_row.CoreQuality_z,
             best_row.Solubility_z,
         )
+
+        if best_row.additive > best_overall_score:
+            best_overall_score = best_row.additive
+            best_overall_seq = best_row.seq
+            stale_count = 0
+        else:
+            stale_count += 1
+
+        if stale_count >= args.patience:
+            logger.warning(
+                "No additive improvement for %d generations. Resetting population around %s",
+                stale_count,
+                best_overall_seq,
+            )
+            stale_count = 0
+            pop = [best_overall_seq]
+            seen_global.add(best_overall_seq)
+            while len(pop) < args.pop_size:
+                cand = _rand_combination(best_overall_seq, allowed, args.max_k)
+                if cand == best_overall_seq or cand in seen_global or cand in pop:
+                    continue
+                pop.append(cand)
+                seen_global.add(cand)
 
         logger.info("Finished generation %d", gen)
 

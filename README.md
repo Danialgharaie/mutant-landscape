@@ -115,3 +115,5 @@ dictionary is recalculated from this new matrix and subsequent additive scoring
 uses the updated values. This helps the algorithm escape local optima by
 re-seeding the population with mutations that are neutral or beneficial relative
 to the new best sequence.
+
+Fallback mutations are guided by the ProSST matrix even when no allowed sites remain. Positions are ranked by the number and sum of negative scores, and random choices are drawn from the best-ranked (least deleterious) sites.

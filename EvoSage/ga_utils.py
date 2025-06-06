@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import random
 from .prosst_additive import SINGLE_LETTER_CODES
 
@@ -126,7 +127,33 @@ def tournament(pop, k=3):
   return contenders[0]["seq"] if isinstance(contenders[0], dict) else contenders[0]
 
 
-def guided_mutate(seq, cand, p_m=0.08):
+def rank_negative_sites(scores: pd.DataFrame) -> list[int]:
+  """Return positions ranked by count and sum of negative ProSST scores.
+
+  Parameters
+  ----------
+  scores : pandas.DataFrame
+    ProSST score matrix returned by :func:`run_prosst`.
+
+  Returns
+  -------
+  list[int]
+    0-indexed positions sorted from least to most negative.
+  """
+  aa_cols = [c for c in scores.columns if c in SINGLE_LETTER_CODES]
+  stats = []
+  for row in scores.itertuples(index=False):
+    pos = int(row.index) - 1
+    values = np.array([getattr(row, aa) for aa in aa_cols], dtype=float)
+    neg_mask = values < 0
+    neg_count = int(neg_mask.sum())
+    neg_sum = float(values[neg_mask].sum()) if neg_count > 0 else 0.0
+    stats.append((pos, neg_count, neg_sum))
+  stats.sort(key=lambda x: (x[1], -x[2]))
+  return [s[0] for s in stats]
+
+
+def guided_mutate(seq, cand, p_m=0.08, fallback_rank=None):
   """Mutate ``seq`` only at positions defined in ``cand``.
 
   Parameters
@@ -148,7 +175,11 @@ def guided_mutate(seq, cand, p_m=0.08):
       mutated = True
 
   if not cand or not mutated:
-    pos = random.randrange(len(seq_list))
+    if fallback_rank:
+      top_n = max(1, len(fallback_rank) // 4)
+      pos = random.choice(fallback_rank[:top_n])
+    else:
+      pos = random.randrange(len(seq_list))
     fallback_choices = [aa for aa in SINGLE_LETTER_CODES if aa != seq_list[pos]]
     seq_list[pos] = random.choice(fallback_choices)
 

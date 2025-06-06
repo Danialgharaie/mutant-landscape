@@ -59,7 +59,6 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--beneficial_th", type=float, default=0.5, help="Threshold for beneficial single mutants")
     parser.add_argument("--neutral_th", type=float, default=0.0, help="Threshold for nearly-neutral single mutants")
-    parser.add_argument("--output_csv", help="Optional CSV output path")
     parser.add_argument("--out_dir", help="Directory to store per-generation results")
     parser.add_argument(
         "--dynamic_prosst",
@@ -280,6 +279,7 @@ def main() -> None:
     }
 
     history: List[Dict[str, Any]] = []
+    archive: Dict[str, Dict[str, Any]] = {}
     final_df: pd.DataFrame | None = None
 
     best_overall_seq = wt_seq
@@ -383,6 +383,19 @@ def main() -> None:
             history.append(row._asdict())
 
         fronts = nsga2_sort(pop, score_list)
+        if fronts and fronts[0]:
+            for cand in fronts[0]:
+                seq = cand["seq"]
+                if seq not in archive:
+                    row = df[df["seq"] == seq].iloc[0]
+                    archive[seq] = {
+                        "seq": seq,
+                        "gen": gen,
+                        "additive": row.additive,
+                        "Stability_z": row.Stability_z,
+                        "CoreQuality_z": row.CoreQuality_z,
+                        "Solubility_z": row.Solubility_z,
+                    }
         elite = elitist_selection(fronts, keep=args.pop_size)
         elite = enforce_diversity(elite)
         new_pop: List[str] = []
@@ -506,33 +519,46 @@ def main() -> None:
 
         logger.info("Final Pareto Front:")
         seen: set[str] = set()  # filter out duplicate sequences
+        front_rows: list[dict[str, Any]] = []
         for cand in best_front:
             seq = cand["seq"]
             if seq in seen:
                 continue
             seen.add(seq)
-            add = compute_additive_score(seq, scores)
-            z = destress_cache[seq]["z"]
+            row = final_df[final_df["seq"] == seq].iloc[0]
+            front_rows.append(
+                {
+                    "seq": seq,
+                    "additive": row.additive,
+                    "Stability_z": row.Stability_z,
+                    "CoreQuality_z": row.CoreQuality_z,
+                    "Solubility_z": row.Solubility_z,
+                }
+            )
             logger.info(
                 "%s Additive: %.3f Stab_z: %.3f Core_z: %.3f Sol_z: %.3f",
                 seq,
-                add,
-                z['Stability_z'],
-                z['CoreQuality_z'],
-                z['Solubility_z'],
+                row.additive,
+                row.Stability_z,
+                row.CoreQuality_z,
+                row.Solubility_z,
             )
 
-    if args.output_csv:
-        seen_csv: set[str] = set()  # remove duplicate sequences
-        unique_rows = []
-        for row in history:
-            seq = row["seq"]
-            if seq in seen_csv:
-                continue
-            seen_csv.add(seq)
-            unique_rows.append(row)
-        history_df = pd.DataFrame(unique_rows)
-        history_df.to_csv(args.output_csv, index=False)
+        pd.DataFrame(front_rows).to_csv(Path(run_root) / "final_pareto_front.csv", index=False)
+
+    seen_csv: set[str] = set()  # remove duplicate sequences
+    unique_rows = []
+    for row in history:
+        seq = row["seq"]
+        if seq in seen_csv:
+            continue
+        seen_csv.add(seq)
+        unique_rows.append(row)
+    history_df = pd.DataFrame(unique_rows)
+    history_df.to_csv(Path(run_root) / "history.csv", index=False)
+
+    if archive:
+        pd.DataFrame(archive.values()).to_csv(Path(run_root) / "pareto_archive.csv", index=False)
 
 
 if __name__ == "__main__":

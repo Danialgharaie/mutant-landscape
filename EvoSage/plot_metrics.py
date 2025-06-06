@@ -14,7 +14,7 @@ def plot_history(csv_path: str, output_dir: str = ".", metrics: Iterable[str] | 
     Parameters
     ----------
     csv_path : str
-        Path to the ``--output_csv`` file produced by ``EvoSage.main``.
+        Path to the ``history.csv`` file produced by ``EvoSage.main``.
     output_dir : str, optional
         Where to write the plots. The directory is created if needed.
     metrics : Iterable[str] | None, optional
@@ -46,7 +46,7 @@ def plot_final_scatter(csv_path: str, output_dir: str = ".", metrics: Iterable[s
     Parameters
     ----------
     csv_path : str
-        Path to the ``--output_csv`` file produced by ``EvoSage.main``.
+        Path to the ``history.csv`` file produced by ``EvoSage.main``.
     output_dir : str, optional
         Where to write the plot. The directory is created if needed.
     metrics : Iterable[str] | None, optional

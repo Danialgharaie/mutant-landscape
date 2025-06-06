@@ -107,6 +107,21 @@ def _hamming(a, b):
   return sum(ch1 != ch2 for ch1, ch2 in zip(a, b))
 
 
+def population_diversity(pop):
+  """Return mean pairwise Hamming distance normalised by sequence length."""
+  if not pop:
+    return 0.0
+  n = len(pop)
+  length = len(pop[0])
+  total = 0
+  count = 0
+  for i in range(n):
+    for j in range(i + 1, n):
+      total += _hamming(pop[i], pop[j])
+      count += 1
+  return (total / count / length) if count else 0.0
+
+
 def enforce_diversity(pop, d_min=5):
   """Greedy diversity filter based on Hamming distance."""
   selected = []

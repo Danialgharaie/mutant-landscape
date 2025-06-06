@@ -97,6 +97,11 @@ dictionary accordingly before continuing.
 `--mutation_prob` controls the per-site mutation probability used when
 generating new candidates (default `0.08`). Higher values explore more mutations
 each generation.
+The adaptive schedule can be tuned with `--pm-start`, `--pm-min`,
+`--pm-decay` and `--diversity-thresh`. These set the initial mutation rate,
+minimum allowed rate, multiplicative decay factor and diversity threshold that
+triggers decay. Defaults are chosen so that the mutation probability remains
+fixed when these options are not provided.
 
 ## Plotting Results
 

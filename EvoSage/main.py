@@ -20,6 +20,7 @@ from .ga_utils import (
     crossover,
     guided_mutate,
     rank_negative_sites,
+    population_diversity,
 )
 from .evoef2 import build_mutant
 from .eval import run_destress
@@ -72,6 +73,30 @@ def parse_args() -> argparse.Namespace:
         help="Mutation probability per allowed position",
     )
     parser.add_argument(
+        "--pm-start",
+        type=float,
+        default=None,
+        help="Starting mutation probability for adaptive schedule",
+    )
+    parser.add_argument(
+        "--pm-min",
+        type=float,
+        default=None,
+        help="Minimum mutation probability when adapting",
+    )
+    parser.add_argument(
+        "--pm-decay",
+        type=float,
+        default=1.0,
+        help="Multiplicative decay factor for adaptive mutation probability",
+    )
+    parser.add_argument(
+        "--diversity-thresh",
+        type=float,
+        default=0.0,
+        help="Diversity threshold to trigger mutation rate decay",
+    )
+    parser.add_argument(
         "--crossover_rate",
         type=float,
         default=0.5,
@@ -88,7 +113,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Random seed for reproducibility",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.pm_start is None:
+        args.pm_start = args.mutation_prob
+    if args.pm_min is None:
+        args.pm_min = args.mutation_prob
+    return args
 
 
 def _allowed_mutations(scores: pd.DataFrame, neutral_th: float) -> Dict[int, List[str]]:
@@ -282,12 +312,18 @@ def main() -> None:
     archive: Dict[str, Dict[str, Any]] = {}
     final_df: pd.DataFrame | None = None
 
+    current_pm = args.pm_start
+
     best_overall_seq = wt_seq
     best_overall_score = compute_additive_score(wt_seq, scores)
     stale_count = 0
 
     for gen in tqdm(range(args.generations), desc="Generation"):
         logger.info("Starting generation %d", gen)
+        diversity = population_diversity(pop)
+        if diversity < args.diversity_thresh or stale_count >= args.patience:
+            current_pm = max(args.pm_min, current_pm * args.pm_decay)
+        logger.debug("Diversity %.3f Current_pm %.4f", diversity, current_pm)
         pop = [seq for i, seq in enumerate(pop) if seq != wt_seq and seq not in pop[:i]]
         seen_global.update(pop)
         gen_dir = Path(run_root) / f"generation_{gen:02d}"
@@ -421,7 +457,7 @@ def main() -> None:
             child = guided_mutate(
                 child,
                 allowed,
-                p_m=args.mutation_prob,
+                p_m=current_pm,
                 fallback_rank=fallback_rank,
             )
             attempts += 1

@@ -398,9 +398,12 @@ def main() -> None:
         mutants_dir.mkdir(parents=True, exist_ok=True)
 
         gen_rows: List[Dict[str, Any]] = []
+        destress_pending: List[Tuple[str, Path, Path, float]] = []
 
         for idx, seq in enumerate(pop):
             add_score = compute_additive_score(seq, scores)
+            dest_pdb = mutants_dir / f"mut_{idx:04d}.pdb"
+            dest_csv = mutants_dir / f"mut_{idx:04d}_destress.csv"
             if seq not in destress_cache:
                 mut_str = _mutfile_from_seq(seq, wt_seq)
                 with tempfile.TemporaryDirectory() as tmpdir:
@@ -413,35 +416,47 @@ def main() -> None:
                     else:
                         shutil.copy(pdb, os.path.join(tmpdir, "model.pdb"))
                         mut_pdb = os.path.join(tmpdir, "model.pdb")
-                    metrics_dict = run_destress(tmpdir)
-                    csv_files = [f for f in os.listdir(tmpdir) if f.endswith(".csv")]
-                    csv_src = max(csv_files, key=lambda x: os.path.getctime(os.path.join(tmpdir, x)))
-                    dest_pdb = mutants_dir / f"mut_{idx:04d}.pdb"
-                    dest_csv = mutants_dir / f"mut_{idx:04d}_destress.csv"
                     shutil.move(mut_pdb, dest_pdb)
-                    shutil.move(os.path.join(tmpdir, csv_src), dest_csv)
-                    mut_metrics = next(iter(metrics_dict.values()))
-                deltas, scores_dict = compute_deltas(mut_metrics, orig_metrics)
-                destress_cache[seq] = {
-                    "delta": deltas,
-                    "score": scores_dict,
-                    "pdb_path": str(dest_pdb),
-                    "csv_path": str(dest_csv),
-                }
+                destress_pending.append((seq, dest_pdb, dest_csv, add_score))
             else:
                 data = destress_cache[seq]
-                dest_pdb = mutants_dir / f"mut_{idx:04d}.pdb"
-                dest_csv = mutants_dir / f"mut_{idx:04d}_destress.csv"
                 shutil.copy(data["pdb_path"], dest_pdb)
                 shutil.copy(data["csv_path"], dest_csv)
+                entry = {
+                    "seq": seq,
+                    "additive": add_score,
+                    **destress_cache[seq]["delta"],
+                    **destress_cache[seq]["score"],
+                }
+                gen_rows.append(entry)
 
-            entry = {
-                "seq": seq,
-                "additive": add_score,
-                **destress_cache[seq]["delta"],
-                **destress_cache[seq]["score"],
-            }
-            gen_rows.append(entry)
+        if destress_pending:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                for _, pdb_path, _, _ in destress_pending:
+                    shutil.copy(pdb_path, os.path.join(tmpdir, os.path.basename(pdb_path)))
+                metrics_dict = run_destress(tmpdir)
+                csv_files = [f for f in os.listdir(tmpdir) if f.endswith(".csv")]
+                latest_csv = max(csv_files, key=lambda x: os.path.getctime(os.path.join(tmpdir, x)))
+                csv_src = os.path.join(tmpdir, latest_csv)
+                for seq, pdb_path, csv_path, add_score in destress_pending:
+                    shutil.copy(csv_src, csv_path)
+                    mut_metrics = metrics_dict.get(os.path.basename(pdb_path))
+                    if mut_metrics is None:
+                        raise RuntimeError(f"DeStReSS metrics missing for {pdb_path}")
+                    deltas, scores_dict = compute_deltas(mut_metrics, orig_metrics)
+                    destress_cache[seq] = {
+                        "delta": deltas,
+                        "score": scores_dict,
+                        "pdb_path": str(pdb_path),
+                        "csv_path": str(csv_path),
+                    }
+                    entry = {
+                        "seq": seq,
+                        "additive": add_score,
+                        **deltas,
+                        **scores_dict,
+                    }
+                    gen_rows.append(entry)
 
         df = pd.DataFrame(gen_rows).fillna(0.0)
         for name in METRIC_INFO:

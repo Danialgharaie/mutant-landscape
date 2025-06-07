@@ -343,7 +343,7 @@ def main() -> None:
             seen_global.add(seq)
 
     attempts = 0
-    max_attempts = args.pop_size * 10
+    max_attempts = args.pop_size * 100
     while len(pop) < args.pop_size and attempts < max_attempts:
         cand = _rand_combination(wt_seq, allowed, args.max_k, fallback_rank)
         attempts += 1
@@ -544,7 +544,7 @@ def main() -> None:
             next_seen.add(seq)
 
         attempts = 0
-        max_attempts = args.pop_size * 10
+        max_attempts = args.pop_size * 100
         while len(new_pop) < args.pop_size and attempts < max_attempts:
             parent1 = tournament(elite)
             parent2 = tournament(elite)
@@ -568,7 +568,7 @@ def main() -> None:
             next_seen.add(child)
 
         attempts = 0
-        max_attempts_rand = args.pop_size * 10
+        max_attempts_rand = args.pop_size * 100
         while len(new_pop) < args.pop_size and attempts < max_attempts_rand:
             cand = _rand_combination(wt_seq, allowed, args.max_k, fallback_rank)
             attempts += 1

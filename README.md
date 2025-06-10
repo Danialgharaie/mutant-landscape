@@ -4,7 +4,7 @@
 
 This repository implements a **fitness landscape construction** method for protein mutations. The approach leverages **pre-trained protein language models (PLMs)** to systematically quantify mutation effects **without explicit supervision**.
 
-The framework currently supports **additive scoring** for multi-site mutations and **per-position fitness landscapes**. Future updates will introduce **epistatic interaction analysis** for capturing higher-order mutation effects.
+The framework provides **additive scoring** for multi-site mutants and builds **per-position fitness landscapes** directly from language model probabilities. Epistatic effects are not explicitly modeled, but the search algorithms can explore multi-point combinations.
 
 
 
@@ -16,6 +16,11 @@ The framework currently supports **additive scoring** for multi-site mutations a
 ✔ **Optional Bayesian Optimization**: Tune GA hyperparameters between runs.
 ✔ **Lightweight Surrogate Model**: Predict fitness values with caching.
 ✔ **Adaptive Mutation Rates**: Track successful mutations and update probabilities on the fly.
+✔ **De-StReSS Evaluation**: Score structural stability via EvoEF2 and related tools.
+✔ **Island Model Support**: Evolve multiple sub-populations with migration.
+✔ **Local Optimization Modes**: Lamarckian or Baldwinian hill climbing steps.
+✔ **Advanced Selection Operators**: Epsilon-dominant NSGA-II, MOEA/D, and hypervolume-based elitism.
+✔ **Nondominated Archive and FASTA Output**: Persist Pareto-optimal sequences each generation.
 
 
 
@@ -63,6 +68,10 @@ export PYTHONPATH="$PYTHONPATH:$(pwd)/ProSST"
 
 You can add this line to your `.bashrc`, `.zshrc`, or run it in your shell before using the code.
 
+## EvoEF2 and De-StReSS
+
+`setup.sh` automatically clones the **EvoEF2** and **De-StReSS** repositories and builds the required binaries. EvoSage relies on these tools to generate mutant structures and compute stability metrics.
+
 
 ## Installing torch-scatter
 
@@ -85,7 +94,9 @@ python -m EvoSage.main "<WT_SEQUENCE>" path/to/structure.pdb --generations 50
 
 Alternatively, provide the parameters in a JSON file and pass it via
 `--config`. Every command-line option can be specified as a key. Any field
-omitted from the JSON keeps the default value printed by `--help`.
+omitted from the JSON keeps the default value printed by `--help`. The keys
+in this JSON mirror their corresponding CLI flags so new features like
+`islands` or `bayes_opt` can also be configured here.
 
 ```json
 {
@@ -109,7 +120,23 @@ omitted from the JSON keeps the default value printed by `--help`.
   "cr_min": null,
   "cr_decay": 1.0,
   "log_level": "INFO",
-  "seed": null
+  "seed": null,
+  "islands": 1,
+  "migration_interval": 5,
+  "migrants": 2,
+  "niche_clusters": 5,
+  "niche_size": 3,
+  "lamarck": false,
+  "baldwin": false,
+  "opt_steps": 5,
+  "bayes_opt": false,
+  "bayes_calls": 10,
+  "use_surrogate": false,
+  "surrogate_threshold": 0.0,
+  "hv_selection": false,
+  "moead_selection": false,
+  "epsilon": 0.0,
+  "adaptive_mutation": false
 }
 ```
 
@@ -143,6 +170,13 @@ triggers decay. Crossover adapts using the analogous `--cr-start`, `--cr-min`
 and `--cr-decay` options. Defaults keep both rates fixed when the parameters are
 not provided.
 
+Additional flags expose advanced behaviors:
+* `--lamarckian` or `--baldwinian` perform a short local optimization step.
+* `--islands` enables parallel island populations with periodic migration.
+* `--hv-selection` and `--moead-selection` switch the selection strategy.
+* `--bayes-opt` tunes hyperparameters, optionally assisted by `--use-surrogate`.
+* `--adaptive-mutation` updates mutation probabilities from successful individuals.
+
 ## Plotting Results
 
 The `EvoSage.plot_metrics` module provides helper functions to visualize the search progress. After running the evolutionary search, use the generated `history.csv` to create plots:
@@ -165,6 +199,8 @@ re-seeding the population with mutations that are neutral or beneficial relative
 to the new best sequence.
 
 Fallback mutations are guided by the ProSST matrix even when no allowed sites remain. Positions are ranked by the number and sum of negative scores, and random choices are drawn from the best-ranked (least deleterious) sites.
+
+When running with multiple islands, each sub-population maintains an adaptive grid archive of elites. Individuals migrate between islands every few generations to share beneficial mutations.
 
 ## Self-Adaptive Parameters
 

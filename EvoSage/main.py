@@ -616,20 +616,27 @@ def main() -> None:
                 pred_val = surrogate.predict(eval_seq)
                 if pred_val < args.surrogate_threshold:
                     skip_eval = True
-            if eval_seq not in destress_cache and not skip_eval:
-                mut_str = _mutfile_from_seq(eval_seq, wt_seq)
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    if mut_str and mut_str != ";":
-                        logger.debug(mut_str)
-                        mut_file = os.path.join(tmpdir, "mut.txt")
-                        with open(mut_file, "w") as fh:
-                            fh.write(mut_str)
-                        mut_pdb = build_mutant(pdb, mut_file, tmpdir, quiet=True)
-                    else:
-                        shutil.copy(pdb, os.path.join(tmpdir, "model.pdb"))
-                        mut_pdb = os.path.join(tmpdir, "model.pdb")
-                    shutil.move(mut_pdb, dest_pdb)
-                destress_pending.append((eval_seq, dest_pdb, add_score))
+            if eval_seq not in destress_cache:
+                if skip_eval:
+                    entry = {
+                        "seq": orig_seq if args.baldwin else seq,
+                        "additive": add_score,
+                    }
+                    gen_rows.append(entry)
+                else:
+                    mut_str = _mutfile_from_seq(eval_seq, wt_seq)
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        if mut_str and mut_str != ";":
+                            logger.debug(mut_str)
+                            mut_file = os.path.join(tmpdir, "mut.txt")
+                            with open(mut_file, "w") as fh:
+                                fh.write(mut_str)
+                            mut_pdb = build_mutant(pdb, mut_file, tmpdir, quiet=True)
+                        else:
+                            shutil.copy(pdb, os.path.join(tmpdir, "model.pdb"))
+                            mut_pdb = os.path.join(tmpdir, "model.pdb")
+                        shutil.move(mut_pdb, dest_pdb)
+                    destress_pending.append((eval_seq, dest_pdb, add_score))
             else:
                 data = destress_cache[eval_seq]
                 shutil.copy(data["pdb_path"], dest_pdb)
@@ -638,12 +645,6 @@ def main() -> None:
                     "additive": add_score,
                     **destress_cache[eval_seq]["delta"],
                     **destress_cache[eval_seq]["score"],
-                }
-                gen_rows.append(entry)
-            if skip_eval:
-                entry = {
-                    "seq": orig_seq if args.baldwin else seq,
-                    "additive": add_score,
                 }
                 gen_rows.append(entry)
         

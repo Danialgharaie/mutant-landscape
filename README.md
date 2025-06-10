@@ -149,6 +149,10 @@ Any CLI flags override values from the JSON file.
 
 Use `--help` to see all available options. The script prints the final Pareto
 front and always writes a `history.csv` log inside the run directory.
+Each row of `history.csv` records the generation, sequence and additive/z-score
+metrics for every evaluated candidate. A `pareto_archive.csv` is also produced
+containing the best individual found in each adaptive grid cell along with the
+generation when it was first discovered.
 
 The `--log-level` flag controls logging verbosity and `--seed` sets the
 Python and NumPy random seed for reproducible runs.

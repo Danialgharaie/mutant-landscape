@@ -1,11 +1,12 @@
 class AdaptiveGridArchive:
   """Archive that bins solutions into a grid that adapts to score ranges."""
 
-  def __init__(self, dim: int, bins: int = 10):
+  def __init__(self, dim: int, bins: int = 10, metric_names=None):
     self.dim = dim
     self.bins = [bins] * dim
     self.bounds_min = [float("inf")] * dim
     self.bounds_max = [float("-inf")] * dim
+    self.metric_names = list(metric_names or [f"obj{i}" for i in range(dim)])
     self.archive: dict[tuple[int, ...], dict[str, object]] = {}
 
   def _update_bounds(self, point: tuple[float, ...]) -> None:
@@ -26,15 +27,21 @@ class AdaptiveGridArchive:
       idx.append(max(0, min(self.bins[i] - 1, b)))
     return tuple(idx)
 
-  def add(self, seq: str, score: tuple[float, ...]) -> None:
+  def add(self, seq: str, score: tuple[float, ...], gen: int) -> None:
     self._update_bounds(score)
     cell = self._get_cell(score)
     cur = self.archive.get(cell)
     if cur is None or score[0] > cur["score"][0]:
-      self.archive[cell] = {"seq": seq, "score": score}
+      self.archive[cell] = {"seq": seq, "score": score, "gen": gen}
 
   def values(self):
-    return list(self.archive.values())
+    rows = []
+    for entry in self.archive.values():
+      row = {"seq": entry["seq"], "gen": entry.get("gen")}
+      for name, val in zip(self.metric_names, entry["score"]):
+        row[name] = val
+      rows.append(row)
+    return rows
 
 
 def cluster_niching(df, elite, n_clusters: int = 5, per_cluster: int = 5):

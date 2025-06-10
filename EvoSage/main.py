@@ -726,7 +726,17 @@ def main() -> None:
         fronts = nsga2_sort(pop, score_list, epsilon=args.epsilon)
         if fronts and fronts[0]:
             for cand in fronts[0]:
-                archive.add(cand["seq"], cand["score"])
+                row = df[df["seq"] == cand["seq"]].iloc[0]
+                archive.add(
+                    cand["seq"],
+                    (
+                        row.additive,
+                        row.Stability_z,
+                        row.CoreQuality_z,
+                        row.Solubility_z,
+                    ),
+                    gen,
+                )
 
         if args.moead_selection:
             elite = moead_select(pop, score_list, keep=args.pop_size)
@@ -784,7 +794,7 @@ def main() -> None:
         return new_pop, df
 
     history: List[Dict[str, Any]] = []
-    archive = AdaptiveGridArchive(dim=4)
+    archive = AdaptiveGridArchive(dim=4, metric_names=["additive", "Stability_z", "CoreQuality_z", "Solubility_z"])
     final_dfs: list[pd.DataFrame | None] = [None] * args.islands
 
     for gen in tqdm(range(args.generations), desc="Generation"):
@@ -793,6 +803,18 @@ def main() -> None:
         for isl_idx in range(args.islands):
             populations[isl_idx], df = process_island(populations[isl_idx], isl_idx, gen)
             island_dfs.append(df)
+            history.extend(
+                df[
+                    [
+                        "gen",
+                        "seq",
+                        "additive",
+                        "Stability_z",
+                        "CoreQuality_z",
+                        "Solubility_z",
+                    ]
+                ].to_dict("records")
+            )
 
         if surrogate:
             fit_df = pd.concat(island_dfs, ignore_index=True)

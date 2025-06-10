@@ -243,6 +243,35 @@ def _mutfile_from_seq(seq: str, wt_seq: str, chain: str = "A") -> str:
     return ",".join(parts) + ";" if parts else ""
 
 
+def _fill_random_unique(
+    base_seq: str,
+    allowed: Dict[int, List[str]],
+    max_k: int,
+    fallback_rank: List[int] | None,
+    seen: set[str],
+    num_needed: int,
+    attempt_factor: int = 1000,
+) -> list[str]:
+    """Generate up to ``num_needed`` unique sequences using ``_rand_combination``.
+
+    This helper keeps trying random combinations while avoiding duplicates and the
+    wild type sequence. ``attempt_factor`` controls the number of attempts per
+    required sequence to avoid endless loops in degenerate cases.
+    """
+
+    result: list[str] = []
+    attempts = 0
+    max_attempts = num_needed * attempt_factor
+    while len(result) < num_needed and attempts < max_attempts:
+        cand = _rand_combination(base_seq, allowed, max_k, fallback_rank)
+        attempts += 1
+        if cand == base_seq or cand in seen or cand in result:
+            continue
+        result.append(cand)
+        seen.add(cand)
+    return result
+
+
 def _extract_evoef2_total(metrics: Dict[str, Any]) -> float:
     """Return the EvoEF2 total energy value from a metrics dictionary."""
     for key, val in metrics.items():
@@ -354,13 +383,19 @@ def main() -> None:
     if len(pop) < args.pop_size:
         logger.warning(
             "Unable to generate enough unique initial sequences after %d attempts. "
-            "Filling remaining population with possible duplicates.",
+            "Filling remaining population with random unique sequences.",
             attempts,
         )
-        while len(pop) < args.pop_size:
-            cand = _rand_combination(wt_seq, allowed, args.max_k, fallback_rank)
-            pop.append(cand)
-            seen_global.add(cand)
+        needed = args.pop_size - len(pop)
+        extra = _fill_random_unique(
+            wt_seq,
+            allowed,
+            args.max_k,
+            fallback_rank,
+            seen_global,
+            needed,
+        )
+        pop.extend(extra)
 
     run_root = args.out_dir or f"run_{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
     Path(run_root).mkdir(parents=True, exist_ok=True)
@@ -580,13 +615,22 @@ def main() -> None:
         if len(new_pop) < args.pop_size:
             logger.warning(
                 "Unable to generate enough unique sequences after %d attempts. "
-                "Filling remaining slots with possible duplicates.",
+                "Filling remaining slots with random unique sequences.",
                 attempts,
             )
-            while len(new_pop) < args.pop_size:
-                cand = _rand_combination(wt_seq, allowed, args.max_k, fallback_rank)
-                new_pop.append(cand)
-                next_seen.add(cand)
+            needed = args.pop_size - len(new_pop)
+            combined_seen = seen_global | next_seen
+            extra = _fill_random_unique(
+                wt_seq,
+                allowed,
+                args.max_k,
+                fallback_rank,
+                combined_seen,
+                needed,
+            )
+            new_pop.extend(extra)
+            next_seen.update(extra)
+            seen_global.update(extra)
 
         pop = new_pop
         seen_global.update(pop)
@@ -644,13 +688,19 @@ def main() -> None:
             if len(pop) < args.pop_size:
                 logger.warning(
                     "Unable to generate enough unique reset sequences after %d attempts. "
-                    "Filling remaining slots with possible duplicates.",
+                    "Filling remaining slots with random unique sequences.",
                     attempts,
                 )
-                while len(pop) < args.pop_size:
-                    cand = _rand_combination(best_overall_seq, allowed, args.max_k, fallback_rank)
-                    pop.append(cand)
-                    seen_global.add(cand)
+                needed = args.pop_size - len(pop)
+                extra = _fill_random_unique(
+                    best_overall_seq,
+                    allowed,
+                    args.max_k,
+                    fallback_rank,
+                    seen_global,
+                    needed,
+                )
+                pop.extend(extra)
 
         logger.info("Finished generation %d", gen)
 

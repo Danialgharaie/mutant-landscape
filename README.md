@@ -12,7 +12,10 @@ The framework currently supports **additive scoring** for multi-site mutations a
 
 ✔ **Fitness Landscape Construction**: Computes mutation scores across all possible amino acid substitutions for each position.  
 ✔ **Additive Scoring Model**: Evaluates mutations independently to approximate functional effects.  
-✔ **Structure-Aware Predictions**: Uses **ProSST-derived structure tokens** as context.  
+✔ **Structure-Aware Predictions**: Uses **ProSST-derived structure tokens** as context.
+✔ **Optional Bayesian Optimization**: Tune GA hyperparameters between runs.
+✔ **Lightweight Surrogate Model**: Predict fitness values with caching.
+✔ **Adaptive Mutation Rates**: Track successful mutations and update probabilities on the fly.
 
 
 

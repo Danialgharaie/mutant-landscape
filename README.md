@@ -102,6 +102,9 @@ omitted from the JSON keeps the default value printed by `--help`.
   "pm_decay": 1.0,
   "diversity_thresh": 0.0,
   "crossover_rate": 0.5,
+  "cr_start": null,
+  "cr_min": null,
+  "cr_decay": 1.0,
   "log_level": "INFO",
   "seed": null
 }
@@ -133,8 +136,9 @@ each generation.
 The adaptive schedule can be tuned with `--pm-start`, `--pm-min`,
 `--pm-decay` and `--diversity-thresh`. These set the initial mutation rate,
 minimum allowed rate, multiplicative decay factor and diversity threshold that
-triggers decay. Defaults are chosen so that the mutation probability remains
-fixed when these options are not provided.
+triggers decay. Crossover adapts using the analogous `--cr-start`, `--cr-min`
+and `--cr-decay` options. Defaults keep both rates fixed when the parameters are
+not provided.
 
 ## Plotting Results
 
@@ -158,3 +162,13 @@ re-seeding the population with mutations that are neutral or beneficial relative
 to the new best sequence.
 
 Fallback mutations are guided by the ProSST matrix even when no allowed sites remain. Positions are ranked by the number and sum of negative scores, and random choices are drawn from the best-ranked (least deleterious) sites.
+
+## Self-Adaptive Parameters
+
+Both the mutation probability and crossover rate can adapt during the search. At
+each generation EvoSage adjusts these rates based on the population diversity and
+whether the best additive score improved over the previous generation. Use
+`--cr-start`, `--cr-min` and `--cr-decay` to control the adaptive schedule for
+crossover in the same way that `--pm-start`, `--pm-min` and `--pm-decay` control
+the mutation rate. The per-generation history of diversity, rates and best score
+is saved to `stats_history.csv` for further analysis.

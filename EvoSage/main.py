@@ -152,6 +152,27 @@ def parse_args() -> argparse.Namespace:
         help="Multiplicative decay factor for adaptive mutation probability",
     )
     parser.add_argument(
+        "--cr-start",
+        type=float,
+        dest="cr_start",
+        default=config_data.get("cr_start"),
+        help="Starting crossover rate for adaptive schedule",
+    )
+    parser.add_argument(
+        "--cr-min",
+        type=float,
+        dest="cr_min",
+        default=config_data.get("cr_min"),
+        help="Minimum crossover rate when adapting",
+    )
+    parser.add_argument(
+        "--cr-decay",
+        type=float,
+        dest="cr_decay",
+        default=config_data.get("cr_decay", 1.0),
+        help="Multiplicative decay factor for adaptive crossover rate",
+    )
+    parser.add_argument(
         "--diversity-thresh",
         type=float,
         dest="diversity_thresh",
@@ -185,6 +206,10 @@ def parse_args() -> argparse.Namespace:
         args.pm_start = args.mutation_prob
     if args.pm_min is None:
         args.pm_min = args.mutation_prob
+    if args.cr_start is None:
+        args.cr_start = args.crossover_rate
+    if args.cr_min is None:
+        args.cr_min = args.crossover_rate
     return args
 
 
@@ -428,18 +453,25 @@ def main() -> None:
     archive: Dict[str, Dict[str, Any]] = {}
     final_df: pd.DataFrame | None = None
 
-    current_pm = args.pm_start
-
     best_overall_seq = wt_seq
     best_overall_score = compute_additive_score(wt_seq, scores)
+    current_pm = args.pm_start
+    current_cr = args.cr_start
+    prev_best_add = best_overall_score
+    improved_last_gen = True
+    stats_history: List[Dict[str, Any]] = []
     stale_count = 0
 
     for gen in tqdm(range(args.generations), desc="Generation"):
         logger.info("Starting generation %d", gen)
         diversity = population_diversity(pop)
-        if diversity < args.diversity_thresh or stale_count >= args.patience:
+        if diversity < args.diversity_thresh or stale_count >= args.patience or not improved_last_gen:
             current_pm = max(args.pm_min, current_pm * args.pm_decay)
-        logger.debug("Diversity %.3f Current_pm %.4f", diversity, current_pm)
+            current_cr = max(args.cr_min, current_cr * args.cr_decay)
+        else:
+            current_pm = min(args.pm_start, current_pm / args.pm_decay)
+            current_cr = min(args.cr_start, current_cr / args.cr_decay)
+        logger.debug("Diversity %.3f Current_pm %.4f Current_cr %.4f", diversity, current_pm, current_cr)
         pop = [seq for i, seq in enumerate(pop) if seq != wt_seq and seq not in pop[:i]]
         seen_global.update(pop)
         gen_dir = Path(run_root) / f"generation_{gen:02d}"
@@ -585,7 +617,7 @@ def main() -> None:
             parent2 = tournament(elite)
             if parent1 is None or parent2 is None:
                 break
-            if random.random() < args.crossover_rate:
+            if random.random() < current_cr:
                 child = crossover(parent1, parent2)
             else:
                 child = parent1
@@ -649,12 +681,24 @@ def main() -> None:
             best_row.Solubility_z,
         )
 
+        improved_last_gen = best_row.additive > prev_best_add
+        prev_best_add = best_row.additive
         if best_row.additive > best_overall_score:
             best_overall_score = best_row.additive
             best_overall_seq = best_row.seq
             stale_count = 0
         else:
             stale_count += 1
+
+        stats_history.append(
+            {
+                "gen": gen,
+                "diversity": diversity,
+                "mutation_prob": current_pm,
+                "crossover_rate": current_cr,
+                "best_additive": best_row.additive,
+            }
+        )
 
         if stale_count >= args.patience:
             logger.warning(
@@ -770,6 +814,9 @@ def main() -> None:
         unique_rows.append(row)
     history_df = pd.DataFrame(unique_rows)
     history_df.to_csv(Path(run_root) / "history.csv", index=False)
+
+    if stats_history:
+        pd.DataFrame(stats_history).to_csv(Path(run_root) / "stats_history.csv", index=False)
 
     if archive:
         pd.DataFrame(archive.values()).to_csv(Path(run_root) / "pareto_archive.csv", index=False)

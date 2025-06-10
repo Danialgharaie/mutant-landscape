@@ -592,7 +592,8 @@ def main() -> None:
 
     def process_island(pop: list[str], island_idx: int, gen: int) -> tuple[list[str], pd.DataFrame]:
         nonlocal allowed, fallback_rank, scores, mutation_weights, mutation_counts
-        gen_dir = Path(run_root) / f"generation_{gen:02d}_island_{island_idx}"
+        # Place each island folder within its generation directory
+        gen_dir = Path(run_root) / f"generation_{gen:02d}" / f"island_{island_idx}"
         mutants_dir = gen_dir / "mutants"
         mutants_dir.mkdir(parents=True, exist_ok=True)
 

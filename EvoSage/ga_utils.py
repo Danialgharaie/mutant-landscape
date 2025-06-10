@@ -1,18 +1,31 @@
 import numpy as np
 import pandas as pd
 import random
+from typing import Iterable, Sequence
 from .prosst_additive import SINGLE_LETTER_CODES
 
 
-def _dominates(a, b):
-  """Return True if solution ``a`` dominates solution ``b`` (for maximization)."""
-  better_or_equal = all(x >= y for x, y in zip(a, b))
-  strictly_better = any(x > y for x, y in zip(a, b))
-  return better_or_equal and strictly_better
+def _dominates(a: Sequence[float], b: Sequence[float], epsilon: float | Iterable[float] = 0.0) -> bool:
+  """Return True if solution ``a`` epsilon-dominates solution ``b``."""
+  if isinstance(epsilon, Iterable):
+    eps = list(epsilon)
+  else:
+    eps = [epsilon] * len(a)
+  strictly_better = False
+  for x, y, e in zip(a, b, eps):
+    if x + e < y:
+      return False
+    if x + e > y:
+      strictly_better = True
+  return strictly_better
 
 
-def nsga2_sort(pop, scores):
+def nsga2_sort(pop, scores, epsilon: float | Iterable[float] = 0.0):
   """Perform fast non-dominated sorting and compute crowding distance.
+
+  The optional ``epsilon`` parameter enables epsilon-dominance: solution ``a``
+  dominates ``b`` only if ``a_i + epsilon >= b_i`` for all objectives and
+  ``a_i + epsilon > b_i`` for at least one objective.
 
   Parameters
   ----------
@@ -37,9 +50,9 @@ def nsga2_sort(pop, scores):
     for q in range(n):
       if p == q:
         continue
-      if _dominates(scores[p], scores[q]):
+      if _dominates(scores[p], scores[q], epsilon):
         domination_set[p].add(q)
-      elif _dominates(scores[q], scores[p]):
+      elif _dominates(scores[q], scores[p], epsilon):
         dominated_count[p] += 1
     if dominated_count[p] == 0:
       fronts[0].append(p)
@@ -207,3 +220,58 @@ def guided_mutate(seq, cand, p_m=0.08, fallback_rank=None):
     seq_list[pos] = random.choice(fallback_choices)
 
   return "".join(seq_list)
+
+
+def _hypervolume(points: Sequence[Sequence[float]], ref: Sequence[float]) -> float:
+  """Return dominated hypervolume for maximization objectives."""
+  def hv_recursive(pts: list[list[float]], r: list[float]) -> float:
+    dim = len(r)
+    if dim == 1:
+      return r[0] - min(p[0] for p in pts)
+    pts.sort(key=lambda x: x[0])
+    hv = 0.0
+    prev = r[0]
+    while pts:
+      x = pts[-1][0]
+      slice_pts = [p[1:] for p in pts]
+      hv += hv_recursive(slice_pts, r[1:]) * (prev - x)
+      prev = x
+      pts = [p for p in pts if p[0] < x]
+    return hv
+  filt = [list(p) for p in points if all(p[i] <= ref[i] for i in range(len(ref)))]
+  if not filt:
+    return 0.0
+  return hv_recursive(filt, list(ref))
+
+
+def _hv_contributions(points: Sequence[Sequence[float]], ref: Sequence[float]) -> list[float]:
+  total = _hypervolume(points, ref)
+  contrib = []
+  for i in range(len(points)):
+    subset = list(points[:i]) + list(points[i+1:])
+    contrib.append(total - _hypervolume(subset, ref))
+  return contrib
+
+
+def hypervolume_selection(fronts, keep=100, reference_point=None):
+  """Select individuals based on hypervolume contribution."""
+  if not fronts:
+    return []
+  all_scores = [cand["score"] for f in fronts for cand in f]
+  num_obj = len(all_scores[0]) if all_scores else 0
+  if reference_point is None:
+    reference_point = [min(s[i] for s in all_scores) - 1.0 for i in range(num_obj)]
+
+  new_pop = []
+  for front in fronts:
+    if len(new_pop) + len(front) <= keep:
+      new_pop.extend(front)
+      continue
+    k = keep - len(new_pop)
+    scores = [cand["score"] for cand in front]
+    contrib = _hv_contributions(scores, reference_point)
+    order = sorted(range(len(front)), key=lambda i: contrib[i], reverse=True)
+    for idx in order[:k]:
+      new_pop.append(front[idx])
+    break
+  return new_pop

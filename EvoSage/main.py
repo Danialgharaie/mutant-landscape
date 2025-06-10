@@ -22,12 +22,12 @@ from .ga_utils import (
     crossover,
     guided_mutate,
     rank_negative_sites,
-    population_diversity,
 )
 from .moead import moead_select
 from .evoef2 import build_mutant
 from .eval import run_destress
 from .scoring import compute_additive_score
+from .island import AdaptiveGridArchive, cluster_niching
 from . import logger, setup_logging
 
 def ascii_splash():
@@ -218,6 +218,39 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=config_data.get("seed"),
         help="Random seed for reproducibility",
+    )
+    parser.add_argument(
+        "--islands",
+        type=int,
+        default=config_data.get("islands", 1),
+        help="Number of islands for island-model GA",
+    )
+    parser.add_argument(
+        "--migration-interval",
+        type=int,
+        dest="migration_interval",
+        default=config_data.get("migration_interval", 5),
+        help="Generations between island migrations",
+    )
+    parser.add_argument(
+        "--migrants",
+        type=int,
+        default=config_data.get("migrants", 2),
+        help="Number of individuals exchanged during migration",
+    )
+    parser.add_argument(
+        "--niche-clusters",
+        type=int,
+        dest="niche_clusters",
+        default=config_data.get("niche_clusters", 5),
+        help="Number of clusters for niching",
+    )
+    parser.add_argument(
+        "--niche-size",
+        type=int,
+        dest="niche_size",
+        default=config_data.get("niche_size", 3),
+        help="Max individuals kept per niche",
     )
     args = parser.parse_args(namespace=argparse.Namespace(**config_data))
 
@@ -410,39 +443,47 @@ def main() -> None:
             i: [aa for aa in SINGLE_LETTER_CODES if aa != wt_seq[i]]
             for i in range(len(wt_seq))
         }
-    pop: List[str] = []
+    populations: list[list[str]] = []
     seen_global: set[str] = {wt_seq}
 
-    for seq in _good_single_mutants(scores, wt_seq, args.beneficial_th):
-        if seq != wt_seq and seq not in seen_global:
-            pop.append(seq)
-            seen_global.add(seq)
+    base_beneficial = [seq for seq in _good_single_mutants(scores, wt_seq, args.beneficial_th) if seq != wt_seq]
+    ben_idx = 0
+    for _ in range(args.islands):
+        pop: list[str] = []
+        while ben_idx < len(base_beneficial) and len(pop) < args.pop_size:
+            seq = base_beneficial[ben_idx]
+            ben_idx += 1
+            if seq not in seen_global:
+                pop.append(seq)
+                seen_global.add(seq)
 
-    attempts = 0
-    max_attempts = args.pop_size * 100
-    while len(pop) < args.pop_size and attempts < max_attempts:
-        cand = _rand_combination(wt_seq, allowed, args.max_k, fallback_rank)
-        attempts += 1
-        if cand != wt_seq and cand not in seen_global:
-            pop.append(cand)
-            seen_global.add(cand)
+        attempts = 0
+        max_attempts = args.pop_size * 100
+        while len(pop) < args.pop_size and attempts < max_attempts:
+            cand = _rand_combination(wt_seq, allowed, args.max_k, fallback_rank)
+            attempts += 1
+            if cand != wt_seq and cand not in seen_global:
+                pop.append(cand)
+                seen_global.add(cand)
 
-    if len(pop) < args.pop_size:
-        logger.warning(
-            "Unable to generate enough unique initial sequences after %d attempts. "
-            "Filling remaining population with random unique sequences.",
-            attempts,
-        )
-        needed = args.pop_size - len(pop)
-        extra = _fill_random_unique(
-            wt_seq,
-            allowed,
-            args.max_k,
-            fallback_rank,
-            seen_global,
-            needed,
-        )
-        pop.extend(extra)
+        if len(pop) < args.pop_size:
+            logger.warning(
+                "Unable to generate enough unique initial sequences after %d attempts. "
+                "Filling remaining population with random unique sequences.",
+                attempts,
+            )
+            needed = args.pop_size - len(pop)
+            extra = _fill_random_unique(
+                wt_seq,
+                allowed,
+                args.max_k,
+                fallback_rank,
+                seen_global,
+                needed,
+            )
+            pop.extend(extra)
+
+        populations.append(pop)
 
     run_root = args.out_dir or f"run_{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
     Path(run_root).mkdir(parents=True, exist_ok=True)
@@ -471,41 +512,18 @@ def main() -> None:
         "csv_path": str(gen0_dir / "wildtype_destress.csv"),
     }
 
-    history: List[Dict[str, Any]] = []
-    archive: Dict[str, Dict[str, Any]] = {}
-    final_df: pd.DataFrame | None = None
-
-    best_overall_seq = wt_seq
-    best_overall_score = compute_additive_score(wt_seq, scores)
-    current_pm = args.pm_start
-    current_cr = args.cr_start
-    prev_best_add = best_overall_score
-    improved_last_gen = True
-    stats_history: List[Dict[str, Any]] = []
-    stale_count = 0
-
-    for gen in tqdm(range(args.generations), desc="Generation"):
-        logger.info("Starting generation %d", gen)
-        diversity = population_diversity(pop)
-        if diversity < args.diversity_thresh or stale_count >= args.patience or not improved_last_gen:
-            current_pm = max(args.pm_min, current_pm * args.pm_decay)
-            current_cr = max(args.cr_min, current_cr * args.cr_decay)
-        else:
-            current_pm = min(args.pm_start, current_pm / args.pm_decay)
-            current_cr = min(args.cr_start, current_cr / args.cr_decay)
-        logger.debug("Diversity %.3f Current_pm %.4f Current_cr %.4f", diversity, current_pm, current_cr)
-        pop = [seq for i, seq in enumerate(pop) if seq != wt_seq and seq not in pop[:i]]
-        seen_global.update(pop)
-        gen_dir = Path(run_root) / f"generation_{gen:02d}"
+    def process_island(pop: list[str], island_idx: int, gen: int) -> tuple[list[str], pd.DataFrame]:
+        nonlocal allowed, fallback_rank, scores
+        gen_dir = Path(run_root) / f"generation_{gen:02d}_island_{island_idx}"
         mutants_dir = gen_dir / "mutants"
         mutants_dir.mkdir(parents=True, exist_ok=True)
 
-        gen_rows: List[Dict[str, Any]] = []
-        destress_pending: List[Tuple[str, Path, float]] = []
+        gen_rows: list[dict[str, Any]] = []
+        destress_pending: list[tuple[str, Path, float]] = []
 
         for idx, seq in enumerate(pop):
             add_score = compute_additive_score(seq, scores)
-            dest_pdb = mutants_dir / f"mut_{idx:04d}.pdb"
+            dest_pdb = mutants_dir / f"mut_{island_idx}_{idx:04d}.pdb"
             if seq not in destress_cache:
                 mut_str = _mutfile_from_seq(seq, wt_seq)
                 with tempfile.TemporaryDirectory() as tmpdir:
@@ -543,13 +561,9 @@ def main() -> None:
                 shutil.move(csv_src, destress_out)
                 for seq, pdb_path, add_score in destress_pending:
                     key = os.path.basename(pdb_path)
-                    mut_metrics = metrics_dict.get(key)
+                    mut_metrics = metrics_dict.get(key) or metrics_dict.get(os.path.splitext(key)[0])
                     if mut_metrics is None:
-                        mut_metrics = metrics_dict.get(os.path.splitext(key)[0])
-                    if mut_metrics is None:
-                        raise RuntimeError(
-                            f"DeStReSS metrics missing for {pdb_path}"
-                        )
+                        raise RuntimeError(f"DeStReSS metrics missing for {pdb_path}")
                     deltas, scores_dict = compute_deltas(mut_metrics, orig_metrics)
                     destress_cache[seq] = {
                         "delta": deltas,
@@ -581,13 +595,12 @@ def main() -> None:
         df.insert(0, "gen", gen)
         df.to_csv(gen_dir / "metrics_with_delta.csv", index=False)
 
-        # Save sequences for this generation to a FASTA file
         fasta_path = gen_dir / "population.fasta"
         with open(fasta_path, "w") as fh:
             for i, seq in enumerate(df["seq"], start=1):
                 fh.write(f">seq{i}\n{seq}\n")
 
-        final_df = df
+        final_dfs[island_idx] = df
 
         score_list = []
         for row in df.itertuples(index=False):
@@ -605,34 +618,27 @@ def main() -> None:
                     -row.Solubility_z,
                 )
             )
-            history.append(row._asdict())
 
         fronts = nsga2_sort(pop, score_list, epsilon=args.epsilon)
         if fronts and fronts[0]:
             for cand in fronts[0]:
-                seq = cand["seq"]
-                if seq not in archive:
-                    row = df[df["seq"] == seq].iloc[0]
-                    archive[seq] = {
-                        "seq": seq,
-                        "gen": gen,
-                        "additive": row.additive,
-                        "Stability_z": row.Stability_z,
-                        "CoreQuality_z": row.CoreQuality_z,
-                        "Solubility_z": row.Solubility_z,
-                    }
+                archive.add(cand["seq"], cand["score"])
+
         if args.moead_selection:
             elite = moead_select(pop, score_list, keep=args.pop_size)
         elif args.hv_selection:
             elite = hypervolume_selection(fronts, keep=args.pop_size)
         else:
             elite = elitist_selection(fronts, keep=args.pop_size)
+
         elite = enforce_diversity(elite)
-        new_pop: List[str] = []
+        elite = cluster_niching(df, elite, args.niche_clusters, args.niche_size)
+
+        new_pop: list[str] = []
         next_seen: set[str] = set()
         for cand in elite:
             seq = cand["seq"]
-            if seq == wt_seq or seq in seen_global or seq in next_seen:
+            if seq == wt_seq or seq in next_seen:
                 continue
             new_pop.append(seq)
             next_seen.add(seq)
@@ -644,159 +650,49 @@ def main() -> None:
             parent2 = tournament(elite)
             if parent1 is None or parent2 is None:
                 break
-            if random.random() < current_cr:
-                child = crossover(parent1, parent2)
-            else:
-                child = parent1
-            child = guided_mutate(
-                child,
-                allowed,
-                p_m=current_pm,
-                fallback_rank=fallback_rank,
-            )
+            child = crossover(parent1, parent2) if random.random() < args.crossover_rate else parent1
+            child = guided_mutate(child, allowed, p_m=args.mutation_prob, fallback_rank=fallback_rank)
             attempts += 1
-            if child == wt_seq or child in seen_global or child in next_seen:
+            if child == wt_seq or child in next_seen:
                 continue
-            logger.debug("Selected candidate %s", child)
             new_pop.append(child)
             next_seen.add(child)
 
-        attempts = 0
-        max_attempts_rand = args.pop_size * 100
-        while len(new_pop) < args.pop_size and attempts < max_attempts_rand:
-            cand = _rand_combination(wt_seq, allowed, args.max_k, fallback_rank)
-            attempts += 1
-            if cand == wt_seq or cand in seen_global or cand in next_seen:
-                continue
-            new_pop.append(cand)
-            next_seen.add(cand)
-
         if len(new_pop) < args.pop_size:
-            logger.warning(
-                "Unable to generate enough unique sequences after %d attempts. "
-                "Filling remaining slots with random unique sequences.",
-                attempts,
-            )
             needed = args.pop_size - len(new_pop)
-            combined_seen = seen_global | next_seen
-            extra = _fill_random_unique(
-                wt_seq,
-                allowed,
-                args.max_k,
-                fallback_rank,
-                combined_seen,
-                needed,
-            )
+            extra = _fill_random_unique(wt_seq, allowed, args.max_k, fallback_rank, next_seen, needed)
             new_pop.extend(extra)
-            next_seen.update(extra)
-            seen_global.update(extra)
+        return new_pop, df
 
-        pop = new_pop
-        seen_global.update(pop)
+    history: List[Dict[str, Any]] = []
+    archive = AdaptiveGridArchive(dim=4)
+    final_dfs: list[pd.DataFrame | None] = [None] * args.islands
 
-        best_idx = df['additive'].idxmax()
-        best_row = df.loc[best_idx]
-        logger.info(
-            "Generation %d summary: pop=%d unique=%d best_seq=%s add=%.3f Stab_z=%.3f Core_z=%.3f Sol_z=%.3f",
-            gen,
-            len(df),
-            df['seq'].nunique(),
-            best_row.seq,
-            best_row.additive,
-            best_row.Stability_z,
-            best_row.CoreQuality_z,
-            best_row.Solubility_z,
-        )
+    for gen in tqdm(range(args.generations), desc="Generation"):
+        logger.info("Starting generation %d", gen)
+        island_dfs = []
+        for isl_idx in range(args.islands):
+            populations[isl_idx], df = process_island(populations[isl_idx], isl_idx, gen)
+            island_dfs.append(df)
 
-        improved_last_gen = best_row.additive > prev_best_add
-        prev_best_add = best_row.additive
-        if best_row.additive > best_overall_score:
-            best_overall_score = best_row.additive
-            best_overall_seq = best_row.seq
-            stale_count = 0
-        else:
-            stale_count += 1
+        if args.islands > 1 and gen % args.migration_interval == 0 and gen > 0:
+            for i in range(args.islands):
+                migrants = island_dfs[i].sort_values("additive", ascending=False)["seq"].head(args.migrants).tolist()
+                dest = (i + 1) % args.islands
+                dest_df = island_dfs[dest].sort_values("additive")
+                worst = dest_df["seq"].head(len(migrants)).tolist()
+                populations[dest] = [s for s in populations[dest] if s not in worst] + migrants
 
-        stats_history.append(
-            {
-                "gen": gen,
-                "diversity": diversity,
-                "mutation_prob": current_pm,
-                "crossover_rate": current_cr,
-                "best_additive": best_row.additive,
-            }
-        )
-
-        if stale_count >= args.patience:
-            logger.warning(
-                "No additive improvement for %d generations. Resetting population around %s",
-                stale_count,
-                best_overall_seq,
-            )
-            stale_count = 0
-            pdb_path = destress_cache[best_overall_seq]["pdb_path"]
-            new_scores = run_prosst(best_overall_seq, pdb_path)
-            allowed = _allowed_mutations(new_scores, args.neutral_th)
-            fallback_rank = rank_negative_sites(new_scores)
-            if not allowed:
-                allowed = {
-                    i: [aa for aa in SINGLE_LETTER_CODES if aa != best_overall_seq[i]]
-                    for i in range(len(best_overall_seq))
-                }
-            scores = new_scores
-            pop = [best_overall_seq]
-            seen_global.add(best_overall_seq)
-            attempts = 0
-            max_attempts_reset = args.pop_size * 10
-            while len(pop) < args.pop_size and attempts < max_attempts_reset:
-                cand = _rand_combination(best_overall_seq, allowed, args.max_k, fallback_rank)
-                attempts += 1
-                if cand == best_overall_seq or cand in seen_global or cand in pop:
-                    continue
-                pop.append(cand)
-                seen_global.add(cand)
-
-            if len(pop) < args.pop_size:
-                logger.warning(
-                    "Unable to generate enough unique reset sequences after %d attempts. "
-                    "Filling remaining slots with random unique sequences.",
-                    attempts,
-                )
-                needed = args.pop_size - len(pop)
-                extra = _fill_random_unique(
-                    best_overall_seq,
-                    allowed,
-                    args.max_k,
-                    fallback_rank,
-                    seen_global,
-                    needed,
-                )
-                pop.extend(extra)
-
-        logger.info("Finished generation %d", gen)
-
-        if args.dynamic_prosst and fronts and fronts[0]:
-            best_seq = fronts[0][0]["seq"]
-            logger.info("Updating ProSST using best sequence %s", best_seq)
-            pdb_path = destress_cache[best_seq]["pdb_path"]
-            scores = run_prosst(best_seq, pdb_path)
-            allowed = _allowed_mutations(scores, args.neutral_th)
-            fallback_rank = rank_negative_sites(scores)
-            if not allowed:
-                allowed = {
-                    i: [aa for aa in SINGLE_LETTER_CODES if aa != best_seq[i]]
-                    for i in range(len(best_seq))
-                }
-
-    if final_df is not None:
+    combined_df = pd.concat([df for df in final_dfs if df is not None], ignore_index=True)
+    if not combined_df.empty:
         final_fronts = nsga2_sort(
-            final_df["seq"].tolist(),
+            combined_df["seq"].tolist(),
             list(
                 zip(
-                    final_df["additive"],
-                    -final_df["Stability_z"],
-                    -final_df["CoreQuality_z"],
-                    -final_df["Solubility_z"],
+                    combined_df["additive"],
+                    -combined_df["Stability_z"],
+                    -combined_df["CoreQuality_z"],
+                    -combined_df["Solubility_z"],
                 )
             ),
             epsilon=args.epsilon,
@@ -804,14 +700,14 @@ def main() -> None:
         best_front = final_fronts[0]
 
         logger.info("Final Pareto Front:")
-        seen: set[str] = set()  # filter out duplicate sequences
+        seen: set[str] = set()
         front_rows: list[dict[str, Any]] = []
         for cand in best_front:
             seq = cand["seq"]
             if seq in seen:
                 continue
             seen.add(seq)
-            row = final_df[final_df["seq"] == seq].iloc[0]
+            row = combined_df[combined_df["seq"] == seq].iloc[0]
             front_rows.append(
                 {
                     "seq": seq,
@@ -832,22 +728,12 @@ def main() -> None:
 
         pd.DataFrame(front_rows).to_csv(Path(run_root) / "final_pareto_front.csv", index=False)
 
-    seen_csv: set[str] = set()  # remove duplicate sequences
-    unique_rows = []
-    for row in history:
-        seq = row["seq"]
-        if seq in seen_csv:
-            continue
-        seen_csv.add(seq)
-        unique_rows.append(row)
-    history_df = pd.DataFrame(unique_rows)
+    history_df = pd.DataFrame(history)
     history_df.to_csv(Path(run_root) / "history.csv", index=False)
 
-    if stats_history:
-        pd.DataFrame(stats_history).to_csv(Path(run_root) / "stats_history.csv", index=False)
-
-    if archive:
+    if archive.values():
         pd.DataFrame(archive.values()).to_csv(Path(run_root) / "pareto_archive.csv", index=False)
+
 
 
 if __name__ == "__main__":

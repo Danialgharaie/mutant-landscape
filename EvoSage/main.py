@@ -17,12 +17,14 @@ from .ga_utils import (
     nsga2_sort,
     elitist_selection,
     enforce_diversity,
+    hypervolume_selection,
     tournament,
     crossover,
     guided_mutate,
     rank_negative_sites,
     population_diversity,
 )
+from .moead import moead_select
 from .evoef2 import build_mutant
 from .eval import run_destress
 from .scoring import compute_additive_score
@@ -178,6 +180,26 @@ def parse_args() -> argparse.Namespace:
         dest="diversity_thresh",
         default=config_data.get("diversity_thresh", 0.0),
         help="Diversity threshold to trigger mutation rate decay",
+    )
+    parser.add_argument(
+        "--epsilon",
+        type=float,
+        default=config_data.get("epsilon", 0.0),
+        help="Epsilon for epsilon-dominance in Pareto sorting",
+    )
+    parser.add_argument(
+        "--hv-selection",
+        dest="hv_selection",
+        action="store_true",
+        default=config_data.get("hv_selection", False),
+        help="Use hypervolume-based selection",
+    )
+    parser.add_argument(
+        "--moead-selection",
+        dest="moead_selection",
+        action="store_true",
+        default=config_data.get("moead_selection", False),
+        help="Use MOEA/D decomposition-based selection",
     )
     parser.add_argument(
         "--crossover_rate",
@@ -585,7 +607,7 @@ def main() -> None:
             )
             history.append(row._asdict())
 
-        fronts = nsga2_sort(pop, score_list)
+        fronts = nsga2_sort(pop, score_list, epsilon=args.epsilon)
         if fronts and fronts[0]:
             for cand in fronts[0]:
                 seq = cand["seq"]
@@ -599,7 +621,12 @@ def main() -> None:
                         "CoreQuality_z": row.CoreQuality_z,
                         "Solubility_z": row.Solubility_z,
                     }
-        elite = elitist_selection(fronts, keep=args.pop_size)
+        if args.moead_selection:
+            elite = moead_select(pop, score_list, keep=args.pop_size)
+        elif args.hv_selection:
+            elite = hypervolume_selection(fronts, keep=args.pop_size)
+        else:
+            elite = elitist_selection(fronts, keep=args.pop_size)
         elite = enforce_diversity(elite)
         new_pop: List[str] = []
         next_seen: set[str] = set()
@@ -772,6 +799,7 @@ def main() -> None:
                     -final_df["Solubility_z"],
                 )
             ),
+            epsilon=args.epsilon,
         )
         best_front = final_fronts[0]
 

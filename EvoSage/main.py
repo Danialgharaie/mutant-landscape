@@ -221,11 +221,15 @@ def _rand_combination(
     if not allowed:
         if fallback_rank:
             top_n = max(1, len(fallback_rank) // 4)
-            pos = random.choice(fallback_rank[:top_n])
+            choices = fallback_rank[:top_n]
         else:
-            pos = random.randrange(len(seq))
-        aa_choices = [aa for aa in SINGLE_LETTER_CODES if aa != wt_seq[pos]]
-        seq[pos] = random.choice(aa_choices)
+            choices = list(range(len(seq)))
+
+        num_mut = random.randint(1, max_k)
+        positions = random.sample(choices, min(num_mut, len(choices)))
+        for pos in positions:
+            aa_choices = [aa for aa in SINGLE_LETTER_CODES if aa != wt_seq[pos]]
+            seq[pos] = random.choice(aa_choices)
         return "".join(seq)
 
     num_mut = random.randint(1, max_k)

@@ -189,7 +189,7 @@ def rank_negative_sites(scores: pd.DataFrame) -> list[int]:
   return [s[0] for s in stats]
 
 
-def guided_mutate(seq, cand, p_m=0.08, fallback_rank=None):
+def guided_mutate(seq, cand, p_m=0.08, fallback_rank=None, weights=None):
   """Mutate ``seq`` only at positions defined in ``cand``.
 
   Parameters
@@ -206,7 +206,10 @@ def guided_mutate(seq, cand, p_m=0.08, fallback_rank=None):
   for pos, aa_choices in cand.items():
     if pos < 0 or pos >= len(seq_list):
       continue
-    if aa_choices and random.random() < p_m:
+    prob = p_m
+    if weights:
+      prob = p_m * float(weights.get(pos, 1.0))
+    if aa_choices and random.random() < prob:
       seq_list[pos] = random.choice(aa_choices)
       mutated = True
 

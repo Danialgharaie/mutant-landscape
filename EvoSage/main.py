@@ -29,6 +29,8 @@ from .eval import run_destress
 from .scoring import compute_additive_score
 from .local_opt import local_optimize
 from .island import AdaptiveGridArchive, cluster_niching
+from .surrogate import SurrogateModel
+from .bayes_opt import bayesian_optimize
 from . import logger, setup_logging
 
 def ascii_splash():
@@ -274,6 +276,41 @@ def parse_args() -> argparse.Namespace:
         default=config_data.get("opt_steps", 5),
         help="Number of hill-climb steps for local optimization",
     )
+    parser.add_argument(
+        "--bayes-opt",
+        dest="bayes_opt",
+        action="store_true",
+        default=config_data.get("bayes_opt", False),
+        help="Use Bayesian optimization to tune GA hyperparameters",
+    )
+    parser.add_argument(
+        "--bayes-calls",
+        type=int,
+        dest="bayes_calls",
+        default=config_data.get("bayes_calls", 10),
+        help="Number of Bayesian optimization steps",
+    )
+    parser.add_argument(
+        "--use-surrogate",
+        dest="use_surrogate",
+        action="store_true",
+        default=config_data.get("use_surrogate", False),
+        help="Enable surrogate model for fitness prediction",
+    )
+    parser.add_argument(
+        "--surrogate-threshold",
+        type=float,
+        dest="surrogate_threshold",
+        default=config_data.get("surrogate_threshold", 0.0),
+        help="Skip expensive evaluation if surrogate prediction below this",
+    )
+    parser.add_argument(
+        "--adaptive-mutation",
+        dest="adaptive_mutation",
+        action="store_true",
+        default=config_data.get("adaptive_mutation", False),
+        help="Update mutation probabilities from successful individuals",
+    )
     args = parser.parse_args(namespace=argparse.Namespace(**config_data))
 
     if args.wt_seq is None or args.pdb is None:
@@ -468,8 +505,24 @@ def main() -> None:
             i: [aa for aa in SINGLE_LETTER_CODES if aa != wt_seq[i]]
             for i in range(len(wt_seq))
         }
+    if args.bayes_opt:
+        def _bo_eval(pop_size: int, mutation_prob: float) -> float:
+            pop = _fill_random_unique(wt_seq, allowed, args.max_k, fallback_rank, set(), int(pop_size))
+            return max(compute_additive_score(s, scores) for s in pop)
+
+        bounds = {
+            "pop_size": (20, 200, "int"),
+            "mutation_prob": (0.01, 0.3, "real"),
+        }
+        best = bayesian_optimize(_bo_eval, bounds, n_calls=args.bayes_calls)
+        args.pop_size = int(best["pop_size"])
+        args.mutation_prob = float(best["mutation_prob"])
+
     populations: list[list[str]] = []
     seen_global: set[str] = {wt_seq}
+    mutation_counts: Dict[int, int] = {}
+    mutation_weights: Dict[int, float] | None = None
+    surrogate = SurrogateModel() if args.use_surrogate else None
 
     base_beneficial = [seq for seq in _good_single_mutants(scores, wt_seq, args.beneficial_th) if seq != wt_seq]
     ben_idx = 0
@@ -538,7 +591,7 @@ def main() -> None:
     }
 
     def process_island(pop: list[str], island_idx: int, gen: int) -> tuple[list[str], pd.DataFrame]:
-        nonlocal allowed, fallback_rank, scores
+        nonlocal allowed, fallback_rank, scores, mutation_weights, mutation_counts
         gen_dir = Path(run_root) / f"generation_{gen:02d}_island_{island_idx}"
         mutants_dir = gen_dir / "mutants"
         mutants_dir.mkdir(parents=True, exist_ok=True)
@@ -557,7 +610,12 @@ def main() -> None:
                 add_score = compute_additive_score(seq, scores)
             eval_seq = seq if args.lamarck else orig_seq
             dest_pdb = mutants_dir / f"mut_{island_idx}_{idx:04d}.pdb"
-            if eval_seq not in destress_cache:
+            skip_eval = False
+            if surrogate and surrogate.fitted:
+                pred_val = surrogate.predict(eval_seq)
+                if pred_val < args.surrogate_threshold:
+                    skip_eval = True
+            if eval_seq not in destress_cache and not skip_eval:
                 mut_str = _mutfile_from_seq(eval_seq, wt_seq)
                 with tempfile.TemporaryDirectory() as tmpdir:
                     if mut_str and mut_str != ";":
@@ -581,7 +639,13 @@ def main() -> None:
                     **destress_cache[eval_seq]["score"],
                 }
                 gen_rows.append(entry)
-
+            if skip_eval:
+                entry = {
+                    "seq": orig_seq if args.baldwin else seq,
+                    "additive": add_score,
+                }
+                gen_rows.append(entry)
+        
         if destress_pending:
             with tempfile.TemporaryDirectory() as tmpdir:
                 for _, pdb_path, _ in destress_pending:
@@ -666,6 +730,15 @@ def main() -> None:
 
         elite = enforce_diversity(elite)
         elite = cluster_niching(df, elite, args.niche_clusters, args.niche_size)
+        if args.adaptive_mutation:
+            for cand in elite:
+                seq = cand["seq"]
+                for i, aa in enumerate(seq):
+                    if aa != wt_seq[i]:
+                        mutation_counts[i] = mutation_counts.get(i, 0) + 1
+            total = sum(mutation_counts.values())
+            if total > 0:
+                mutation_weights = {k: v / total for k, v in mutation_counts.items()}
 
         new_pop: list[str] = []
         next_seen: set[str] = set()
@@ -684,7 +757,13 @@ def main() -> None:
             if parent1 is None or parent2 is None:
                 break
             child = crossover(parent1, parent2) if random.random() < args.crossover_rate else parent1
-            child = guided_mutate(child, allowed, p_m=args.mutation_prob, fallback_rank=fallback_rank)
+            child = guided_mutate(
+                child,
+                allowed,
+                p_m=args.mutation_prob,
+                fallback_rank=fallback_rank,
+                weights=mutation_weights,
+            )
             attempts += 1
             if child == wt_seq or child in next_seen:
                 continue
@@ -707,6 +786,10 @@ def main() -> None:
         for isl_idx in range(args.islands):
             populations[isl_idx], df = process_island(populations[isl_idx], isl_idx, gen)
             island_dfs.append(df)
+
+        if surrogate:
+            fit_df = pd.concat(island_dfs, ignore_index=True)
+            surrogate.fit(fit_df)
 
         if args.islands > 1 and gen % args.migration_interval == 0 and gen > 0:
             for i in range(args.islands):

@@ -192,3 +192,4 @@ wheel==0.41.2
 widgetsnbextension==4.0.10
 xxhash==3.4.1
 yarl==1.9.4
+scikit-optimize==0.9.0

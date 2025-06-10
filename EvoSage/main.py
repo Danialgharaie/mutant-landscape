@@ -27,6 +27,7 @@ from .moead import moead_select
 from .evoef2 import build_mutant
 from .eval import run_destress
 from .scoring import compute_additive_score
+from .local_opt import local_optimize
 from .island import AdaptiveGridArchive, cluster_niching
 from . import logger, setup_logging
 
@@ -252,10 +253,34 @@ def parse_args() -> argparse.Namespace:
         default=config_data.get("niche_size", 3),
         help="Max individuals kept per niche",
     )
+    parser.add_argument(
+        "--lamarckian",
+        dest="lamarck",
+        action="store_true",
+        default=config_data.get("lamarck", False),
+        help="Replace individuals with their local optimum before evaluation",
+    )
+    parser.add_argument(
+        "--baldwinian",
+        dest="baldwin",
+        action="store_true",
+        default=config_data.get("baldwin", False),
+        help="Use local optimum score but keep original sequence",
+    )
+    parser.add_argument(
+        "--opt-steps",
+        type=int,
+        dest="opt_steps",
+        default=config_data.get("opt_steps", 5),
+        help="Number of hill-climb steps for local optimization",
+    )
     args = parser.parse_args(namespace=argparse.Namespace(**config_data))
 
     if args.wt_seq is None or args.pdb is None:
         parser.error("wt_seq and pdb must be provided either via CLI or JSON config")
+
+    if args.lamarck and args.baldwin:
+        parser.error("--lamarckian and --baldwinian modes are mutually exclusive")
 
     if args.pm_start is None:
         args.pm_start = args.mutation_prob
@@ -522,10 +547,18 @@ def main() -> None:
         destress_pending: list[tuple[str, Path, float]] = []
 
         for idx, seq in enumerate(pop):
-            add_score = compute_additive_score(seq, scores)
+            orig_seq = seq
+            if args.lamarck or args.baldwin:
+                opt_seq, add_score = local_optimize(seq, allowed, scores, args.opt_steps)
+                if args.lamarck:
+                    seq = opt_seq
+                    pop[idx] = seq
+            else:
+                add_score = compute_additive_score(seq, scores)
+            eval_seq = seq if args.lamarck else orig_seq
             dest_pdb = mutants_dir / f"mut_{island_idx}_{idx:04d}.pdb"
-            if seq not in destress_cache:
-                mut_str = _mutfile_from_seq(seq, wt_seq)
+            if eval_seq not in destress_cache:
+                mut_str = _mutfile_from_seq(eval_seq, wt_seq)
                 with tempfile.TemporaryDirectory() as tmpdir:
                     if mut_str and mut_str != ";":
                         logger.debug(mut_str)
@@ -537,15 +570,15 @@ def main() -> None:
                         shutil.copy(pdb, os.path.join(tmpdir, "model.pdb"))
                         mut_pdb = os.path.join(tmpdir, "model.pdb")
                     shutil.move(mut_pdb, dest_pdb)
-                destress_pending.append((seq, dest_pdb, add_score))
+                destress_pending.append((eval_seq, dest_pdb, add_score))
             else:
-                data = destress_cache[seq]
+                data = destress_cache[eval_seq]
                 shutil.copy(data["pdb_path"], dest_pdb)
                 entry = {
-                    "seq": seq,
+                    "seq": orig_seq if args.baldwin else seq,
                     "additive": add_score,
-                    **destress_cache[seq]["delta"],
-                    **destress_cache[seq]["score"],
+                    **destress_cache[eval_seq]["delta"],
+                    **destress_cache[eval_seq]["score"],
                 }
                 gen_rows.append(entry)
 

@@ -693,8 +693,13 @@ def main() -> None:
         df.to_csv(gen_dir / "metrics_with_delta.csv", index=False)
 
         fasta_path = gen_dir / "population.fasta"
+        # In some edge cases ``df`` may not contain the ``seq`` column (e.g.
+        # if DeStReSS evaluation failed and no rows were produced).  Falling
+        # back to the current population ensures we can still emit a FASTA
+        # file and avoid a ``KeyError``.
+        sequences = df["seq"] if "seq" in df else pd.Series(pop)
         with open(fasta_path, "w") as fh:
-            for i, seq in enumerate(df["seq"], start=1):
+            for i, seq in enumerate(sequences, start=1):
                 fh.write(f">seq{i}\n{seq}\n")
 
         final_dfs[island_idx] = df

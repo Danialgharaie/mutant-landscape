@@ -14,7 +14,6 @@ The framework currently supports **additive scoring** for multi-site mutations a
 ✔ **Additive Scoring Model**: Evaluates mutations independently to approximate functional effects.  
 ✔ **Structure-Aware Predictions**: Uses **ProSST-derived structure tokens** as context.  
 
-🚀 **Coming Soon**: Epistatic Interaction Analysis (Pairwise Effects)
 
 
 
@@ -48,7 +47,7 @@ To construct a **per-position fitness landscape**, we iterate over all possible 
 
 3. For multi-site mutations, sum the relevant **Δ** values.
 
-⚠️ **Important Note**: This model assumes **independent additive contributions** and does not capture **epistatic interactions** (to be introduced in future updates).
+⚠️ **Important Note**: This model assumes **independent additive contributions** and does not capture **epistatic interactions**.
 
 
 ## Using ProSST with your Python code

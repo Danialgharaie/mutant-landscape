@@ -455,7 +455,7 @@ def main() -> None:
     current_pm = args.pm_start
 
     best_overall_seq = wt_seq
-    best_overall_score = compute_additive_score(wt_seq, scores)
+    best_overall_score = float("-inf")
     stale_count = 0
 
     for gen in tqdm(range(args.generations), desc="Generation"):
@@ -569,7 +569,6 @@ def main() -> None:
             }
             score_list.append(
                 (
-                    row.additive,
                     -row.Stability_z,
                     -row.CoreQuality_z,
                     -row.Solubility_z,
@@ -659,22 +658,25 @@ def main() -> None:
         pop = new_pop
         seen_global.update(pop)
 
-        best_idx = df['additive'].idxmax()
+        struct_scores = df["Stability_z"] + df["CoreQuality_z"] + df["Solubility_z"]
+        best_idx = struct_scores.idxmax()
         best_row = df.loc[best_idx]
         logger.info(
-            "Generation %d summary: pop=%d unique=%d best_seq=%s add=%.3f Stab_z=%.3f Core_z=%.3f Sol_z=%.3f",
+            "Generation %d summary: pop=%d unique=%d best_seq=%s struct=%.3f add=%.3f Stab_z=%.3f Core_z=%.3f Sol_z=%.3f",
             gen,
             len(df),
             df['seq'].nunique(),
             best_row.seq,
+            float(struct_scores.loc[best_idx]),
             best_row.additive,
             best_row.Stability_z,
             best_row.CoreQuality_z,
             best_row.Solubility_z,
         )
 
-        if best_row.additive > best_overall_score:
-            best_overall_score = best_row.additive
+        best_struct_score = float(struct_scores.loc[best_idx])
+        if best_struct_score > best_overall_score:
+            best_overall_score = best_struct_score
             best_overall_seq = best_row.seq
             stale_count = 0
         else:
@@ -682,7 +684,7 @@ def main() -> None:
 
         if stale_count >= args.patience:
             logger.warning(
-                "No additive improvement for %d generations. Resetting population around %s",
+                "No structural improvement for %d generations. Resetting population around %s",
                 stale_count,
                 best_overall_seq,
             )
@@ -746,7 +748,6 @@ def main() -> None:
             final_df["seq"].tolist(),
             list(
                 zip(
-                    final_df["additive"],
                     -final_df["Stability_z"],
                     -final_df["CoreQuality_z"],
                     -final_df["Solubility_z"],

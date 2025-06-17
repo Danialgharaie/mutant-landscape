@@ -256,11 +256,14 @@ def _fill_random_unique(
     num_needed: int,
     attempt_factor: int = 1000,
 ) -> list[str]:
-    """Generate up to ``num_needed`` unique sequences using ``_rand_combination``.
+    """Generate up to ``num_needed`` unique sequences via ``_rand_combination``.
 
-    This helper keeps trying random combinations while avoiding duplicates and the
-    wild type sequence. ``attempt_factor`` controls the number of attempts per
-    required sequence to avoid endless loops in degenerate cases.
+    The helper repeatedly samples combinations while avoiding duplicates and the
+    wild type sequence. ``attempt_factor`` controls the maximum number of attempts
+    per required sequence. If unique sequences cannot be found within this limit
+    using the provided ``allowed`` map, the function falls back to calling
+    ``_rand_combination`` with an empty ``allowed`` dictionary (retaining
+    ``fallback_rank``) to ensure progress.
     """
 
     result: list[str] = []
@@ -273,6 +276,23 @@ def _fill_random_unique(
             continue
         result.append(cand)
         seen.add(cand)
+
+    if len(result) < num_needed:
+        logger.warning(
+            "Allowed mutations exhausted after %d attempts; generating remaining sequences without restrictions",
+            attempts,
+        )
+        remaining = num_needed - len(result)
+        attempts = 0
+        max_attempts = remaining * attempt_factor
+        while len(result) < num_needed and attempts < max_attempts:
+            cand = _rand_combination(base_seq, {}, max_k, fallback_rank)
+            attempts += 1
+            if cand == base_seq or cand in seen or cand in result:
+                continue
+            result.append(cand)
+            seen.add(cand)
+
     return result
 
 

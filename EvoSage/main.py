@@ -126,6 +126,13 @@ def parse_args() -> argparse.Namespace:
         help="Recompute ProSST score matrix using best sequence each generation",
     )
     parser.add_argument(
+        "--baseline-zscores",
+        action="store_true",
+        dest="baseline_zscores",
+        default=config_data.get("baseline_zscores", False),
+        help="Use generation 0 mean/std for structural metric Z-scores",
+    )
+    parser.add_argument(
         "--mutation_prob",
         type=float,
         default=config_data.get("mutation_prob", 0.08),
@@ -453,6 +460,9 @@ def main() -> None:
 
     current_pm = args.pm_start
 
+    baseline_means: Dict[str, float] = {}
+    baseline_stds: Dict[str, float] = {}
+
     best_overall_seq = wt_seq
     best_overall_score = float("-inf")
     stale_count = 0
@@ -539,8 +549,15 @@ def main() -> None:
             score_col = f"score_{name}"
             if score_col not in df:
                 df[score_col] = 0.0
-            mean = df[score_col].mean()
-            std = df[score_col].std(ddof=0)
+            if args.baseline_zscores and gen == 0:
+                baseline_means[score_col] = df[score_col].mean()
+                baseline_stds[score_col] = df[score_col].std(ddof=0)
+            if args.baseline_zscores:
+                mean = baseline_means.get(score_col, 0.0)
+                std = baseline_stds.get(score_col, 0.0)
+            else:
+                mean = df[score_col].mean()
+                std = df[score_col].std(ddof=0)
             df[f"{score_col}_z"] = (df[score_col] - mean) / std if std > 0 else 0.0
 
         df["Stability_z"] = df[[f"score_{m}_z" for m in STABILITY_METRICS]].mean(axis=1)
@@ -756,8 +773,12 @@ def main() -> None:
         score_col = f"score_{name}"
         if score_col not in archive_df:
             archive_df[score_col] = 0.0
-        mean = archive_df[score_col].mean()
-        std = archive_df[score_col].std(ddof=0)
+        if args.baseline_zscores:
+            mean = baseline_means.get(score_col, archive_df[score_col].mean())
+            std = baseline_stds.get(score_col, archive_df[score_col].std(ddof=0))
+        else:
+            mean = archive_df[score_col].mean()
+            std = archive_df[score_col].std(ddof=0)
         archive_df[f"{score_col}_z"] = (
             (archive_df[score_col] - mean) / std if std > 0 else 0.0
         )

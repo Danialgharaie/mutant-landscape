@@ -450,7 +450,6 @@ def main() -> None:
 
     history: List[Dict[str, Any]] = []
     archive: Dict[str, Dict[str, Any]] = {}
-    final_df: pd.DataFrame | None = None
 
     current_pm = args.pm_start
 
@@ -556,8 +555,6 @@ def main() -> None:
         with open(fasta_path, "w") as fh:
             for i, seq in enumerate(df["seq"], start=1):
                 fh.write(f">seq{i}\n{seq}\n")
-
-        final_df = df
 
         score_list = []
         for row in df.itertuples(index=False):
@@ -743,29 +740,61 @@ def main() -> None:
                     for i in range(len(best_seq))
                 }
 
-    if final_df is not None:
+    archive_rows: list[dict[str, Any]] = []
+    for seq, data in archive.items():
+        row = {
+            "seq": seq,
+            "gen": data["gen"],
+            "additive": data["additive"],
+        }
+        row.update(destress_cache.get(seq, {}).get("score", {}))
+        archive_rows.append(row)
+
+    archive_df = pd.DataFrame(archive_rows).fillna(0.0)
+
+    for name in METRIC_INFO:
+        score_col = f"score_{name}"
+        if score_col not in archive_df:
+            archive_df[score_col] = 0.0
+        mean = archive_df[score_col].mean()
+        std = archive_df[score_col].std(ddof=0)
+        archive_df[f"{score_col}_z"] = (
+            (archive_df[score_col] - mean) / std if std > 0 else 0.0
+        )
+
+    archive_df["Stability_z"] = archive_df[
+        [f"score_{m}_z" for m in STABILITY_METRICS]
+    ].mean(axis=1)
+    archive_df["CoreQuality_z"] = archive_df[
+        [f"score_{m}_z" for m in CORE_QUALITY_METRICS]
+    ].mean(axis=1)
+    archive_df["Solubility_z"] = archive_df[
+        [f"score_{m}_z" for m in SOLUBILITY_METRICS]
+    ].mean(axis=1)
+
+    if not archive_df.empty:
         final_fronts = nsga2_sort(
-            final_df["seq"].tolist(),
+            archive_df["seq"].tolist(),
             list(
                 zip(
-                    -final_df["Stability_z"],
-                    -final_df["CoreQuality_z"],
-                    -final_df["Solubility_z"],
+                    -archive_df["Stability_z"],
+                    -archive_df["CoreQuality_z"],
+                    -archive_df["Solubility_z"],
                 )
             ),
         )
-        best_front = final_fronts[0]
+        best_front = final_fronts[0] if final_fronts else []
 
         logger.info("Final Pareto Front:")
-        seen: set[str] = set()  # filter out duplicate sequences
-        front_rows: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        final_rows: list[dict[str, Any]] = []
         for cand in best_front:
             seq = cand["seq"]
             if seq in seen:
                 continue
             seen.add(seq)
-            row = final_df[final_df["seq"] == seq].iloc[0]
-            front_rows.append(
+            row = archive_df[archive_df["seq"] == seq].iloc[0]
+            final_rows.append(
                 {
                     "seq": seq,
                     "additive": row.additive,
@@ -783,7 +812,10 @@ def main() -> None:
                 row.Solubility_z,
             )
 
-        pd.DataFrame(front_rows).to_csv(Path(run_root) / "final_pareto_front.csv", index=False)
+        pd.DataFrame(final_rows).to_csv(
+            Path(run_root) / "final_pareto_front.csv", index=False
+        )
+        archive_df.to_csv(Path(run_root) / "pareto_archive.csv", index=False)
 
     seen_csv: set[str] = set()  # remove duplicate sequences
     unique_rows = []
@@ -795,9 +827,6 @@ def main() -> None:
         unique_rows.append(row)
     history_df = pd.DataFrame(unique_rows)
     history_df.to_csv(Path(run_root) / "history.csv", index=False)
-
-    if archive:
-        pd.DataFrame(archive.values()).to_csv(Path(run_root) / "pareto_archive.csv", index=False)
 
 
 if __name__ == "__main__":

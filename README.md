@@ -115,7 +115,8 @@ python -m EvoSage.main --config config.json
 Any CLI flags override values from the JSON file.
 
 Use `--help` to see all available options. The script prints the final Pareto
-front and always writes a `history.csv` log inside the run directory.
+front and writes a `final_pareto_front.csv` containing the best sequences across
+all generations, along with a `history.csv` log inside the run directory.
 
 The `--log-level` flag controls logging verbosity and `--seed` sets the
 Python and NumPy random seed for reproducible runs.

@@ -566,9 +566,9 @@ def main() -> None:
             }
             score_list.append(
                 (
-                    -row.Stability_z,
-                    -row.CoreQuality_z,
-                    -row.Solubility_z,
+                    row.Stability_z,
+                    row.CoreQuality_z,
+                    row.Solubility_z,
                 )
             )
             history.append(row._asdict())
